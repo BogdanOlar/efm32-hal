@@ -1,0 +1,16 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+runner = [
+  "probe-rs",
+  "run",
+  "--chip",
+  "EFM32PG1B200F256IM48",
+  "--speed", "10000",
+  "--log-format",
+  "{{t}%italic%dimmed} {L:severity:italic} {s}\n{╰╴{m} @ {ff}:{l}%italic%dimmed}"
+]
+
+[env]
+DEFMT_LOG="trace"

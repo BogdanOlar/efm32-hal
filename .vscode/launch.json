@@ -1,0 +1,589 @@
+{
+    /* 
+     * Requires the Rust Language Server (rust-analyzer) and Cortex-Debug extensions
+     * https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer
+     * https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug
+     */
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "JLink cmu example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example cmu",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/cmu",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink dma_examples example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example dma_examples",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/dma_examples",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink gpio example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example gpio",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/gpio",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink spi example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example spi",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/spi",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink spi_dma example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example spi_dma",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/spi_dma",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink spi LCD example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example spi LCD",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/spi_lcd",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink spi LCD release example",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example spi LCD",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/release/examples/spi_lcd",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink timer example",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example timer",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/timer",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "JLink timer_le example",
+            /* Configuration for the STM32F303 Discovery board */
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build example timer_le",
+            "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/debug/examples/timer_le",
+            "device": "EFM32PG1B200F256GM48",
+            "svdFile": "${workspaceRoot}/EFM32PG1B.svd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "swoConfig": {
+                "enabled": true,
+                "cpuFrequency": 8000000,
+                "swoFrequency": 2000000,
+                "source": "probe",
+                "decoders": [
+                    {
+                        "type": "console",
+                        "label": "ITM",
+                        "port": 0
+                    }
+                ]
+            }
+        },
+        {
+            "name": "probe_rs dma",
+            "preLaunchTask": "cargo build example dma",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/dma",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs em_exti",
+            "preLaunchTask": "cargo build example em_exti",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/em_exti",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs embassy_button",
+            "preLaunchTask": "cargo build example embassy_button",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/embassy_button",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs embassy_dma",
+            "preLaunchTask": "cargo build example embassy_dma",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/embassy_dma",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs embassy_example",
+            "preLaunchTask": "cargo build example embassy_example",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/embassy_example",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs attach embassy_example",
+            "preLaunchTask": "cargo build example embassy_example",
+            "type": "probe-rs-debug",
+            "request": "attach",
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/embassy_example",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true,
+                            "logFormat": "{{t}%italic%dimmed} {L:severity:italic} {s}    {{ff}:{l}%italic%dimmed}"
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs gpio example",
+            "preLaunchTask": "cargo build example gpio",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/gpio",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs gpio_exti example",
+            "preLaunchTask": "cargo build example gpio_exti",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "fullChipErase": true,
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/gpio_exti",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true
+                        }
+                    ]
+                }
+            ],
+        },
+        {
+            "name": "probe_rs spi example",
+            "preLaunchTask": "cargo build example spi",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/spi",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "probe_rs spi_dma example",
+            "preLaunchTask": "cargo build example spi_dma",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "flashingConfig": {
+                "flashingEnabled": true,
+            },
+            "chip": "EFM32PG1B200F256GM48",
+            "coreConfigs": [
+                {
+                    "programBinary": "target/thumbv7em-none-eabihf/debug/examples/spi_dma",
+                    "svdFile": "EFM32PG1B.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true,
+                            "showLocation": true
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "probe_rs Executable launch example",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            //!MODIFY (or remove)
+            "speed": 24000,
+            //!MODIFY (or remove)
+            "probe": "VID:PID:<Serial>",
+            "runtimeExecutable": "probe-rs",
+            "runtimeArgs": [
+                "dap-server"
+            ],
+            "chip": "EFM32PG1B200F256GM48",
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "haltAfterReset": false,
+                "formatOptions": {
+                    //!MODIFY (or remove). Valid values are: 'bin', 'hex', 'elf'(default), 'idf'
+                    "format": "elf"
+                }
+            },
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    //!MODIFY
+                    "programBinary": "Relative or fully qualified path to your programBinary",
+                    //!MODIFY
+                    "svdFile": "Relative or fully qualified path to your programBinary"
+                }
+            ],
+            "env": {
+                //!MODIFY (or remove)
+                // If you set this variable, check the VSCode console log window for the location of the log file.
+                "RUST_LOG": "info"
+            },
+            // Info, Debug
+            "consoleLogLevel": "Console"
+        }
+    ]
+}

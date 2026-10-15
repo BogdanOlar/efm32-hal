@@ -1,0 +1,59 @@
+{
+    "rust-analyzer.check.allTargets": false,
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.checkOnSave": true,
+    "rust-analyzer.check.targets": "thumbv7em-none-eabihf",
+    "rust-analyzer.cargo.features": [
+        "defmt",
+        "qfn48",
+        "use_debug_pins",
+        // "dma-debug-max-transfer",
+        "efemb",
+        "efemb-timdrv-letim0-hz-32_768",
+        // "efemb-timdrv-letim0-hz-1_000",
+        // "efemb-timdrv-letim0-dbg-pins",
+        "crc-lib-compat",
+        // "debug-spi-dma-defmt-info"
+    ],
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+    },
+    "todo-tree.general.tags": [
+        "BUG",
+        "HACK",
+        "FIXME",
+        "TODO",
+        "XXX",
+        "[ ]",
+        "[x]",
+        "SAFETY"
+    ],
+    "todo-tree.highlights.customHighlight": {
+        "BUG": {
+            "icon": "bug"
+        },
+        "HACK": {
+            "icon": "tools"
+        },
+        "FIXME": {
+            "icon": "flame"
+        },
+        "XXX": {
+            "icon": "x"
+        },
+        "[ ]": {
+            "icon": "issue-draft"
+        },
+        "[x]": {
+            "icon": "issue-closed"
+        },
+        "SAFETY": {
+            "foreground": "white",
+            "background": "red",
+            "icon": "check",
+            // "type": "text"
+        },
+    },
+    "cortex-debug.variableUseNaturalFormat": false,
+}

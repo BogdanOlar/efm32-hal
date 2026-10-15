@@ -1,0 +1,287 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558 
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build example cmu",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "cmu",
+                "--features='defmt'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example dma",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "dma",
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example dma_examples",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "dma_examples",
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example em_exti",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "em_exti",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example embassy_button",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "embassy_button",
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example embassy_dma",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "embassy_dma",
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example embassy_example",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "embassy_example",
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768 efemb-timdrv-letim0-dbg-pins'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example gpio",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "gpio",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example gpio_exti",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "gpio_exti",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example spi",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "spi",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example spi_dma",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "spi_dma",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example spi LCD",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "spi_lcd",
+                "--features='defmt qfn48'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example timer",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "timer",
+                "--features='defmt'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+        {
+            "label": "cargo build example timer_le",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "timer_le",
+                "--features='defmt'"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                // "isDefault": true
+            }
+        },
+
+    ]
+}
