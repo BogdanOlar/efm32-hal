@@ -1,0 +1,180 @@
+//! GPCRC - General Purpose Cyclic Redundancy Check
+//!
+//! # Blocking
+//!
+//! ```rust,no_run
+//! let p = Peripherals::take().unwrap();
+//!
+//! let data: &[u8] = "123456789".as_bytes();
+//!
+//! let driver: crc::Driver = Driver::new(p.gpcrc);
+//!
+//! // Create a CRC with a particular Algorithm
+//! let crc_algo = driver.into_algo_16(&crc::algos::CRC_16_ARC);
+//!
+//! // calculate CRC in one go
+//! crc_algo.update(data);
+//! let crc = crc_algo.finalize();
+//! assert_eq!(crc, 0xbb3d);
+//!
+//! // or calculate CRC in multiple calls
+//! // (CRC algo is reset to initial state when `finalize()` is called)
+//! crc_algo.update(&data[..data.len()/2]);
+//! crc_algo.update(&data[data.len()/2..]);
+//! let crc = crc_algo.finalize();
+//! assert_eq!(crc, 0xbb3d);
+//!
+//! let driver = crc_algo.release();
+//!
+//! // use another algo (CRC-32)
+//! let crc_algo = driver.into_algo_32(&crc::algos::CRC_32_CKSUM);
+//! for b in data {
+//!     crc_algo.update(&[*b]);
+//! }
+//! let crc = crc_algo.finalize();
+//! assert_eq!(crc, 0x765e7680);
+//! ```
+
+pub mod algos;
+pub mod mmio;
+
+/// Cyclic Redundancy Check driver
+#[derive(Debug)]
+pub struct CrcDriver {
+    _peri: embassy_hal_internal::Peri<'static, crate::peripherals::Gpcrc>,
+}
+
+impl CrcDriver {
+    /// Create the CRC driver, consuming the GPCRC peripheral singleton.
+    pub fn new(peri: embassy_hal_internal::Peri<'static, crate::peripherals::Gpcrc>) -> Self {
+        // Enable CRC clock
+        crate::pac::CMU.hfbusclken0().modify(|w| w.set_gpcrc(true));
+
+        Self { _peri: peri }
+    }
+
+    /// Create a CRC-16 algo
+    pub fn into_algo_16(self, algo: &Algorithm<u16>) -> Crc<u16> {
+        mmio::reset();
+        mmio::set_algo_16(algo);
+        mmio::auto_init_set();
+        mmio::enable();
+        mmio::init();
+        Crc {
+            driver: self,
+            xorout: algo.xorout,
+            refout: algo.refout,
+        }
+    }
+
+    /// Create a CRC-32 algo (with a fixed `0x04C11DB7` polynomial supported by the peripheral)
+    pub fn into_algo_32(self, algo: &Algorithm<u32>) -> Crc<u32> {
+        mmio::reset();
+        mmio::set_algo_32(algo);
+        mmio::auto_init_set();
+        mmio::enable();
+        mmio::init();
+        Crc {
+            driver: self,
+            xorout: algo.xorout,
+            refout: algo.refout,
+        }
+    }
+
+    /// Destroy the CRC driver and release the GPCRC peripheral singleton
+    pub fn release(self) -> embassy_hal_internal::Peri<'static, crate::peripherals::Gpcrc> {
+        // Disable CRC clock
+        crate::pac::CMU.hfbusclken0().modify(|w| w.set_gpcrc(false));
+
+        self._peri
+    }
+}
+
+/// CRC algorithm
+#[derive(Debug)]
+// #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Crc<W> {
+    driver: CrcDriver,
+    xorout: W,
+    refout: bool,
+}
+
+impl<W> Crc<W> {
+    /// Push new data
+    pub fn update<DATA: Sized>(&self, data: &[DATA]) {
+        let data: &[u8] = unsafe {
+            core::slice::from_raw_parts(data.as_ptr() as *const u8, core::mem::size_of_val(data))
+        };
+
+        // TODO: use the `GPCRC_INPUTDATA`, `GPCRC_INPUTDATAHWORD` regs when possible, istead of always using the
+        //       byte-sized `GPCRC_INPUTDATABYTE`
+        for b in data {
+            mmio::input_u8(*b);
+        }
+    }
+
+    /// Destroy this Algo and return the CRC driver used to create it
+    pub fn release(self) -> CrcDriver {
+        mmio::disable();
+        self.driver
+    }
+}
+
+impl Crc<u16> {
+    /// Finalize the Crc algorithm and return the resulted CRC-16
+    ///
+    /// After calling this method, the Crc can be used again to calculate a new CRC with the same [`Algorithm`]
+    pub fn finalize(&self) -> u16 {
+        mmio::data_u16(!self.refout) ^ self.xorout
+    }
+}
+
+impl Crc<u32> {
+    /// Finalize the Crc algorithm and return the resulted CRC-32
+    ///
+    /// After calling this method, the Crc can be used again to calculate a new CRC with the same [`Algorithm`]
+    pub fn finalize(&self) -> u32 {
+        mmio::data_u32(!self.refout) ^ self.xorout
+    }
+}
+
+/// CRC algorithm
+///
+/// Can be either 16-bit CRC with any polynomial, or a 32-bit CRC with the fixed `0x04C11DB7` polynomial
+///
+/// [See the crc-catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm#crc.legend)
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Algorithm<W> {
+    poly: W,
+    init: W,
+    xorout: W,
+    refin: bool,
+    refout: bool,
+}
+
+impl Algorithm<u16> {
+    /// Create a CRC-16 algo
+    pub const fn new(poly: u16, init: u16, xorout: u16, refin: bool, refout: bool) -> Self {
+        Self {
+            poly,
+            init,
+            xorout,
+            refin,
+            refout,
+        }
+    }
+}
+
+impl Algorithm<u32> {
+    /// Create the 32-bit `IEEE 802.3` CRC algo (`0x04C11DB7` polynomial)
+    pub const fn new(init: u32, xorout: u32, refin: bool, refout: bool) -> Self {
+        Self {
+            poly: 0x04C11DB7,
+            init,
+            xorout,
+            refin,
+            refout,
+        }
+    }
+}

@@ -1,0 +1,193 @@
+[package]
+name = "efm32-hal"
+version = "0.1.0"
+authors = ["Bogdan Olar <olar.bogdan.dev@gmail.com>"]
+edition = "2021"
+description = "Hardware abstraction layer (HAL) for Silicon Labs EFM32PG1B and EFM32GG11 microcontrollers"
+keywords = ["embedded-hal", "efm32", "hal", "silabs"]
+categories = ["embedded", "hardware-support", "no-std"]
+readme = "README.md"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/BogdanOlar/efm32-hal"
+
+[package.metadata.docs.rs]
+# config for `document-features`
+all-features = true     # enable all features when creating the documentation
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+members = ["testsuite"]
+
+[dependencies]
+# efm32-pac = { version = "0.4.4", features = ["critical-section", "rt", "atomics", "defmt"] }
+efm32-pac = { path = "../efm32-pac/", features = ["critical-section", "rt", "atomics", "defmt", "efm32pg1b"] }
+embassy-hal-internal = { version = "0.5", features = ["cortex-m", "prio-bits-3"] }
+embedded-hal = { version = "1.0" }
+embedded-hal-async = { version="1.0", optional = true }
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.5"
+cortex-m-semihosting = "0.5.0"
+critical-section = { version = "1.2.0"}
+document-features = { version = "0.2"}
+#! ### Optional dependencies
+log = { version = "0.4.29", optional = true }
+defmt = { version = "1.0", optional = true }
+rtt-target = { version="0.6.1", optional= true }
+embassy-time-driver = { version = "0.2.2", optional = true}
+embassy-time-queue-utils = { version = "0.3.0", optional = true }
+embassy-sync = { version = "0.7.2", optional = true}
+embassy-futures = { version = "0.1.2", optional = true }
+# Used for testing the HAL CRC functions
+crc = { version = "3.4", optional = true }
+
+[dev-dependencies]
+#  Be able to print out types in `embedded-hal` when running the examples
+embedded-hal = { version = "1", features = ["defmt-03"] }
+embedded-graphics = { version = "0.8.1" }
+# ls013b7dh03 = { version = "0.4", features = ["embedded_graphics"] }
+ls013b7dh03 = { path = "../ls013b7dh03", features = ["embedded_graphics"] }
+# Panic handlers used by examples
+panic-halt = "1.0.0"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
+# defmt RTT transport used by examples
+defmt-rtt = "1.0"
+# embassy
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"]}
+embassy-time = { version = "0.5.1"}
+
+[features]
+default = []
+## Allow changing the function of the debug pins (`PF0`, `PF1`,`PF2`,`PF3`)
+use_debug_pins = []
+# Controller package options. Pick either *ONE* of the features , or *NONE*.
+## Controller package QFN32 without DC-DC GPIO.
+qfn32 = []
+## Controller package QFN48 with DC-DC GPIO.
+qfn48 = []
+# Embassy
+## Embassy support for `efm32`
+efemb = [
+    "dep:embassy-futures",
+    "dep:embassy-sync",
+    "dep:embassy-time-queue-utils",
+    "dep:embassy-time-driver",
+    "dep:embedded-hal-async",
+]
+# Embassy time driver
+## Use LeTimer0 as embassy timer base, with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+efemb-timdrv-letim0-hz-32_768 = ["embassy-time-driver/tick-hz-32_768"]
+## Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+efemb-timdrv-letim0-hz-1_000 = ["embassy-time-driver/tick-hz-1_000"]
+# Debug pins showing when interrupt and schedule function are executed
+efemb-timdrv-letim0-dbg-pins = []
+# Debug option for DMA to set max transfer size to `1<<5` instead of `1<<12`
+dma-debug-max-transfer = []
+## Compatibility with the [`crc`](https://github.com/mrhooray/crc-rs) crate, for supported (16 and 32 bit) CRC algorithms
+crc-lib-compat = ["dep:crc"]
+# Debugging options. Pick either *ONE* of the features , or *NONE*.
+## Use `log` crate for debugging
+log = ["dep:log", "dep:rtt-target", "rtt-target/log"]
+## Use `defmt` for debugging
+defmt = [
+    "dep:defmt",
+    "dep:rtt-target",
+    "efm32-pac/defmt",
+    "rtt-target/defmt",
+    "embassy-hal-internal/defmt",
+    "embassy-time/defmt",
+    "embassy-time/defmt-timestamp-uptime-us"
+]
+# Module level debug features
+## Spi
+### Print out some `info!()` about events related to Spi DMA transaction
+debug-spi-dma-defmt-info = []
+
+[profile.release]
+codegen-units    = 1     # LLVM can perform better optimizations using a single thread
+debug            = 2
+debug-assertions = false
+incremental      = false
+lto              = 'fat'
+opt-level        = 's'
+overflow-checks  = false
+
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "s"
+
+# `cargo test` uses the `test` profile, which inherits from `dev`. Enable LTO so
+# the on-device test binaries fit in flash (tests are built by the `testsuite`
+# workspace member, but profiles are workspace-level).
+[profile.test]
+opt-level = "s"
+lto = true
+
+# ==== Examples ========================================================================================================
+
+[[example]]
+name = "cmu"
+required-features = ["defmt"]
+
+[[example]]
+name = "dma"
+required-features = [
+    "defmt",
+    # "dma-debug-max-transfer"
+]
+
+[[example]]
+name = "dma_examples"
+required-features = [
+    "defmt",
+    "efemb-timdrv-letim0-hz-32_768"
+]
+
+[[example]]
+name = "em_exti"
+required-features = ["defmt", "qfn48"]
+
+[[example]]
+name = "embassy_button"
+required-features = ["efemb", "defmt"]
+
+[[example]]
+name = "embassy_dma"
+required-features = ["efemb", "defmt"]
+
+[[example]]
+name = "embassy_example"
+# required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "efemb-timdrv-letim0-dbg-pins"]
+required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
+# required-features = ["efemb", "efemb-timdrv-letim0-hz-1_000"]
+
+[[example]]
+name = "gpio"
+required-features = ["defmt", "qfn48"]
+
+[[example]]
+name = "gpio_exti"
+# enabling "efemb" and "efemb-timdrv-letim0-hz-32_768" features in order to enable defmt timestamps
+required-features = ["defmt", "qfn48", "efemb", "efemb-timdrv-letim0-hz-32_768"]
+
+[[example]]
+name = "spi"
+required-features = ["defmt", "qfn48"]
+
+[[example]]
+name = "spi_dma"
+required-features = ["defmt", "qfn48"]
+
+[[example]]
+name = "spi_lcd"
+required-features = ["defmt", "qfn48"]
+
+[[example]]
+name = "timer"
+required-features = ["defmt"]
+
+[[example]]
+name = "timer_le"
+required-features = ["defmt"]
+
+

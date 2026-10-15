@@ -1,0 +1,449 @@
+//! GPIO Port
+//!
+//! Sep port-wide configurations for each port
+//!
+//! Note than the `set_din_dis()` method is not implemented for Port F unless the `use_debug_pins` crate feature is
+//! enabled. This protects the debug pins (F0, F1, F2, F3) from being accidentally disabled.
+//!
+//! When the `use_debug_pins` feature is enabled, port F provides a `set_din_dis()` method.
+//! This method will only succeede if the debug pins have been converted into GPIO pins using the `into_gpio_pins()`
+//! method on `debug_pins` in [`crate::gpio::GPIO`].
+//!
+
+#[cfg(feature = "use_debug_pins")]
+use crate::gpio::debug::debug_pins_enabled;
+use crate::{gpio::GpioError, Sealed};
+
+/// Generic port type
+///
+/// - `P` is port name: `A` for GPIOA, `B` for GPIOB, etc.
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Port<const P: char> {}
+
+impl<const P: char> Port<P>
+where
+    Port<P>: Sealed,
+{
+    /// Construct a new `Port` with the given generic parameter `P` identifier (`A` for GPIOA, `B` for GPIOB, etc.)
+    pub(crate) const fn new() -> Self {
+        Self {}
+    }
+
+    /// Reset the the Port `P` registers to their reset state
+    pub(crate) fn reset(&mut self) {
+        let port = ports::get(self.id());
+        port.dout().write_value(Default::default());
+        port.model().write_value(Default::default());
+        port.modeh().write_value(Default::default());
+        port.ctrl().write_value(Default::default());
+        port.ovtdis().write_value(Default::default());
+    }
+
+    /// Get the port id
+    pub fn id(&self) -> PortId {
+        PortId::from_char_unchecked(P)
+    }
+
+    /// Get the Drive Strength setting of this port (not in Alternate Mode)
+    pub fn drive_strength(&self) -> DriveStrength {
+        ports::drive_strength(self.id())
+    }
+
+    /// Get the Alternate Drive Strength setting of this port
+    pub fn drive_strength_alt(&self) -> DriveStrength {
+        ports::drive_strength_alt(self.id())
+    }
+
+    /// Set the Drive Strength setting of this port (not in Alternate Mode)
+    pub fn set_drive_strength(&mut self, drive_strength: DriveStrength) {
+        ports::set_drive_strength(self.id(), drive_strength);
+    }
+
+    /// Set the Alternate Drive Strength setting of this port
+    pub fn set_drive_strength_alt(&mut self, drive_strength: DriveStrength) {
+        ports::set_drive_strength_alt(self.id(), drive_strength);
+    }
+
+    /// Get the Slew Rate setting of this port (not in Alternate Mode). Higher values represent faster slewrates.
+    pub fn slew_rate(&self) -> DriveSlewRate {
+        ports::slew_rate(self.id())
+    }
+
+    /// Get the Slew Rate setting of this port. Higher values represent faster slewrates.
+    pub fn slew_rate_alt(&self) -> DriveSlewRate {
+        ports::slew_rate_alt(self.id())
+    }
+
+    /// Set the Slew Rate setting of this port (not in Alternate Mode). Higher values represent faster slewrates
+    pub fn set_slew_rate(&mut self, slew_rate: DriveSlewRate) {
+        ports::set_slew_rate(self.id(), slew_rate);
+    }
+
+    /// Set the Alternate Slew Rate setting of this port. Higher values represent faster slewrates.
+    pub fn set_slew_rate_alt(&mut self, slew_rate: DriveSlewRate) {
+        ports::set_slew_rate_alt(self.id(), slew_rate);
+    }
+
+    /// Get the Data In Disable setting of this port (not in Alternate Mode)
+    pub fn din_dis(&self) -> bool {
+        ports::din_dis(self.id())
+    }
+
+    /// Get the Alternate Data In Disable setting of this port
+    pub fn din_dis_alt(&self) -> bool {
+        ports::din_dis_alt(self.id())
+    }
+
+    /// Set the Alternate Data In Disable setting of this port
+    pub fn set_din_dis_alt(&mut self, din_dis: DataInCtrl) {
+        ports::set_din_dis_alt(self.id(), din_dis);
+    }
+}
+
+impl Sealed for Port<'A'> {}
+impl Sealed for Port<'B'> {}
+impl Sealed for Port<'C'> {}
+impl Sealed for Port<'D'> {}
+impl Sealed for Port<'F'> {}
+
+/// Type safe representation of a Port ID
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum PortId {
+    /// Port A id
+    A = 0,
+    /// Port B id
+    B = 1,
+    /// Port C id
+    C = 2,
+    /// Port D id
+    D = 3,
+    /// Port F id
+    F = 5,
+}
+
+impl PortId {
+    pub(crate) const fn from_u8_unchecked(u: u8) -> Self {
+        match u & 0b1111 {
+            0 => Self::A,
+            1 => Self::B,
+            2 => Self::C,
+            3 => Self::D,
+            5 => Self::F,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) const fn from_char_unchecked(c: char) -> Self {
+        match (c as u8 - b'A') & 0b1111 {
+            0 => Self::A,
+            1 => Self::B,
+            2 => Self::C,
+            3 => Self::D,
+            5 => Self::F,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<u8> for PortId {
+    type Error = GpioError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(PortId::A),
+            1 => Ok(PortId::B),
+            2 => Ok(PortId::C),
+            3 => Ok(PortId::D),
+            5 => Ok(PortId::F),
+            _ => Err(GpioError::InvalidPortId(value)),
+        }
+    }
+}
+
+impl TryFrom<char> for PortId {
+    type Error = GpioError;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            'A' => Ok(PortId::A),
+            'B' => Ok(PortId::B),
+            'C' => Ok(PortId::C),
+            'D' => Ok(PortId::D),
+            'F' => Ok(PortId::F),
+            _ => Err(GpioError::InvalidPortIdLabel(value)),
+        }
+    }
+}
+
+impl From<PortId> for char {
+    fn from(value: PortId) -> Self {
+        match value {
+            PortId::A => 'A',
+            PortId::B => 'B',
+            PortId::C => 'C',
+            PortId::D => 'D',
+            PortId::F => 'F',
+        }
+    }
+}
+
+/// Configure GPIO peripheral registers values for individual ports
+pub(crate) mod ports {
+    use crate::gpio::port::{DataInCtrl, DriveSlewRate, DriveStrength, PortId};
+    use crate::pac::gpio::Port;
+
+    /// Get the memory mapped `Port` corresponding to the given `port` parameter
+    ///
+    /// Note: all ports use the same `Port` struct (the chiptool-generated PAC exposes them as a
+    /// shared clustered block), so this returns the `Port` value for the selected port.
+    #[inline(always)]
+    pub(crate) const fn get(port: PortId) -> Port {
+        match port {
+            PortId::A => crate::pac::GPIO.port_a(),
+            PortId::B => crate::pac::GPIO.port_b(),
+            PortId::C => crate::pac::GPIO.port_c(),
+            PortId::D => crate::pac::GPIO.port_d(),
+            PortId::F => crate::pac::GPIO.port_f(),
+        }
+    }
+
+    /// Get the Drive Strength setting of this port (not in Alternate Mode)
+    pub(crate) fn drive_strength(port: PortId) -> DriveStrength {
+        match get(port).ctrl().read().drive_strength() {
+            true => DriveStrength::Weak,
+            false => DriveStrength::Strong,
+        }
+    }
+
+    /// Get the Alternate Drive Strength setting of this port
+    pub(crate) fn drive_strength_alt(port: PortId) -> DriveStrength {
+        match get(port).ctrl().read().drive_strength_alt() {
+            true => DriveStrength::Weak,
+            false => DriveStrength::Strong,
+        }
+    }
+
+    /// Set the Drive Strength setting of this port (not in Alternate Mode)
+    pub(crate) fn set_drive_strength(port: PortId, drive_strength: DriveStrength) {
+        get(port).ctrl().modify(|w| match drive_strength {
+            DriveStrength::Strong => w.set_drive_strength(false),
+            DriveStrength::Weak => w.set_drive_strength(true),
+        });
+    }
+
+    /// Set the Alternate Drive Strength setting of this port
+    pub(crate) fn set_drive_strength_alt(port: PortId, drive_strength: DriveStrength) {
+        get(port).ctrl().modify(|w| match drive_strength {
+            DriveStrength::Strong => w.set_drive_strength(false),
+            DriveStrength::Weak => w.set_drive_strength(true),
+        });
+    }
+
+    /// Get the Slew Rate setting of this port (not in Alternate Mode). Higher values represent faster slewrates.
+    pub(crate) fn slew_rate(port: PortId) -> DriveSlewRate {
+        DriveSlewRate::from_u8_unchecked(get(port).ctrl().read().slew_rate())
+    }
+
+    /// Get the Slew Rate setting of this port. Higher values represent faster slewrates.
+    pub(crate) fn slew_rate_alt(port: PortId) -> DriveSlewRate {
+        DriveSlewRate::from_u8_unchecked(get(port).ctrl().read().slew_rate_alt())
+    }
+
+    /// Set the Slew Rate setting of this port (not in Alternate Mode). Higher values represent faster slewrates
+    pub(crate) fn set_slew_rate(port: PortId, slew_rate: DriveSlewRate) {
+        get(port)
+            .ctrl()
+            .modify(|w| w.set_slew_rate(slew_rate.into()));
+    }
+
+    /// Set the Alternate Slew Rate setting of this port. Higher values represent faster slewrates.
+    pub(crate) fn set_slew_rate_alt(port: PortId, slew_rate: DriveSlewRate) {
+        get(port)
+            .ctrl()
+            .modify(|w| w.set_slew_rate_alt(slew_rate.into()));
+    }
+
+    /// Get the Data In Disable setting of this port (not in Alternate Mode)
+    pub(crate) fn din_dis(port: PortId) -> bool {
+        get(port).ctrl().read().din_dis()
+    }
+
+    /// Get the Alternate Data In Disable setting of this port
+    pub(crate) fn din_dis_alt(port: PortId) -> bool {
+        get(port).ctrl().read().din_dis_alt()
+    }
+
+    /// Set the Data In Disable setting of this port (not in Alternate Mode)
+    pub(crate) fn set_din_dis(port: PortId, din_dis: DataInCtrl) {
+        get(port).ctrl().modify(|w| match din_dis {
+            DataInCtrl::Enabled => w.set_din_dis(false),
+            DataInCtrl::Disabled => w.set_din_dis(true),
+        });
+    }
+
+    /// Set the Alternate Data In Disable setting of this port
+    pub(crate) fn set_din_dis_alt(port: PortId, din_dis: DataInCtrl) {
+        get(port).ctrl().modify(|w| match din_dis {
+            DataInCtrl::Enabled => w.set_din_dis_alt(false),
+            DataInCtrl::Disabled => w.set_din_dis_alt(true),
+        });
+    }
+}
+
+/// Data In Disable trait used to protect the debug pins in port `F`.
+///
+/// Only implemented for ports `A`, `B`, `C` and `D`.
+pub trait PortDataInDisable: Sealed {
+    /// Set the Data In Disable setting of this port (not in Alternate Mode).
+    fn set_din_dis(&mut self, din_dis: DataInCtrl);
+}
+
+impl PortDataInDisable for Port<'A'> {
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) {
+        ports::set_din_dis(self.id(), din_dis);
+    }
+}
+
+impl PortDataInDisable for Port<'B'> {
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) {
+        ports::set_din_dis(self.id(), din_dis);
+    }
+}
+
+impl PortDataInDisable for Port<'C'> {
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) {
+        ports::set_din_dis(self.id(), din_dis);
+    }
+}
+
+impl PortDataInDisable for Port<'D'> {
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) {
+        ports::set_din_dis(self.id(), din_dis);
+    }
+}
+
+/// Data In Disable trait used to protect the debug pins in port `F`.
+///
+/// Only implemented for port `F`, and only if the `use_debug_pins` crate feature is enabled.
+pub trait PortFDataInDisable: Sealed {
+    /// Set the Data In Disable setting of this port (not in Alternate Mode).
+    ///
+    /// The `use_debug_pins` crate feature needs to be enabled in order to have this method on port `F`.
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) -> Result<(), GpioError>;
+}
+
+#[cfg(feature = "use_debug_pins")]
+impl PortFDataInDisable for Port<'F'> {
+    fn set_din_dis(&mut self, din_dis: DataInCtrl) -> Result<(), GpioError> {
+        match din_dis {
+            DataInCtrl::Enabled => {
+                ports::set_din_dis(self.id(), din_dis);
+                Ok(())
+            }
+            DataInCtrl::Disabled => {
+                if debug_pins_enabled() {
+                    // Don't allow disabling Data In for port `F` if the debug pins (pf0-pf3) are enabled
+                    Err(GpioError::DebugPinsEnabled)
+                } else {
+                    ports::set_din_dis(self.id(), din_dis);
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+/// Data In Control variants for `DIN_DIS` (and `ALT`) field in `GPIO_Px_CTRL` Port Control Register
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum DataInCtrl {
+    /// Data In is NOT disabled
+    Enabled,
+    /// Data In is disabled
+    Disabled,
+}
+
+/// Drive current variants for `DRIVESTRENGTH` (and `ALT`) field in `GPIO_Px_CTRL` Port Control Register
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum DriveStrength {
+    /// Drive strength 10mA drive current
+    Strong,
+    /// Drive strength 1mA drive current
+    Weak,
+}
+
+/// Slewrate limit for port pins. Higher values represent faster slewrates.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum DriveSlewRate {
+    /// Slew rate 0
+    SlewRate0,
+    /// Slew rate 1
+    SlewRate1,
+    /// Slew rate 2
+    SlewRate2,
+    /// Slew rate 3
+    SlewRate3,
+    /// Slew rate 4
+    SlewRate4,
+    /// Slew rate 5
+    SlewRate5,
+    /// Slew rate 6
+    SlewRate6,
+    /// Slew rate 7
+    SlewRate7,
+}
+
+impl DriveSlewRate {
+    pub(crate) const fn from_u8_unchecked(u: u8) -> Self {
+        match u & 0b111 {
+            0 => DriveSlewRate::SlewRate0,
+            1 => DriveSlewRate::SlewRate1,
+            2 => DriveSlewRate::SlewRate2,
+            3 => DriveSlewRate::SlewRate3,
+            4 => DriveSlewRate::SlewRate4,
+            5 => DriveSlewRate::SlewRate5,
+            6 => DriveSlewRate::SlewRate6,
+            7 => DriveSlewRate::SlewRate7,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl From<DriveSlewRate> for u8 {
+    fn from(slew_rate: DriveSlewRate) -> Self {
+        match slew_rate {
+            DriveSlewRate::SlewRate0 => 0,
+            DriveSlewRate::SlewRate1 => 1,
+            DriveSlewRate::SlewRate2 => 2,
+            DriveSlewRate::SlewRate3 => 3,
+            DriveSlewRate::SlewRate4 => 4,
+            DriveSlewRate::SlewRate5 => 5,
+            DriveSlewRate::SlewRate6 => 6,
+            DriveSlewRate::SlewRate7 => 7,
+        }
+    }
+}
+
+impl TryFrom<u8> for DriveSlewRate {
+    type Error = GpioError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(DriveSlewRate::SlewRate0),
+            1 => Ok(DriveSlewRate::SlewRate1),
+            2 => Ok(DriveSlewRate::SlewRate2),
+            3 => Ok(DriveSlewRate::SlewRate3),
+            4 => Ok(DriveSlewRate::SlewRate4),
+            5 => Ok(DriveSlewRate::SlewRate5),
+            6 => Ok(DriveSlewRate::SlewRate6),
+            7 => Ok(DriveSlewRate::SlewRate7),
+            x => Err(GpioError::InvalidSlewRate(x)),
+        }
+    }
+}

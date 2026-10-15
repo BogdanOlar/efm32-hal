@@ -1,0 +1,805 @@
+//! Linked Direct Memory Access
+//!
+//! # ChannelTransfer
+//!
+//! Memory-to-memory transfer
+//!
+//! If a `ChannelTransfer` is dropped while the DMA channel is still active, the transfer
+//! is automatically aborted and the channel is stopped.
+//!
+
+pub mod descriptor;
+pub mod irq;
+pub mod list;
+pub(crate) mod mmio;
+pub mod transfer;
+
+#[cfg(feature = "efemb")]
+pub mod efemb;
+use crate::{
+    dma::{
+        descriptor::{Addr, Descriptor, TransferDescriptor, UnitSize},
+        irq::set_handler,
+        transfer::{ChannelTransfer, MemoryTransferParams, TransferParams},
+    },
+    pac::Interrupt,
+    peripherals,
+};
+use embassy_hal_internal::{Peri, PeripheralType};
+#[cfg(feature = "debug-spi-dma-defmt-info")]
+use defmt::info;
+
+/// Number of DMA channels
+const CHANNEL_COUNT: usize = 1 << 3;
+
+/// DMA transfer result
+pub type DmaResult = Result<(), DmaError>;
+
+/// DMA driver
+///
+/// Exposes the eight DMA channels. Each [`DmaChannel`] holds a copy of the LDMA peripheral
+/// singleton (a zero-sized type created via `steal()`), ensuring the peripheral ownership is
+/// tied to the channel's lifetime.
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Dma {
+    /// DMA channel 0
+    pub ch0: DmaChannel,
+    /// DMA channel 1
+    pub ch1: DmaChannel,
+    /// DMA channel 2
+    pub ch2: DmaChannel,
+    /// DMA channel 3
+    pub ch3: DmaChannel,
+    /// DMA channel 4
+    pub ch4: DmaChannel,
+    /// DMA channel 5
+    pub ch5: DmaChannel,
+    /// DMA channel 6
+    pub ch6: DmaChannel,
+    /// DMA channel 7
+    pub ch7: DmaChannel,
+}
+
+impl Dma {
+    /// Initialize DMA, consuming the LDMA peripheral singleton.
+    ///
+    /// The singleton (`[`peripherals::Ldma`]`, from [`crate::efm32_init`]) is consumed so a
+    /// second `Dma::init` on the same peripheral cannot be called. Each channel gets its own
+    /// copy of the singleton (via `steal()`), tying peripheral ownership to the channel.
+    pub fn init(peri: Peri<'static, peripherals::Ldma>) -> Self {
+        // Consume the peripheral singleton.
+        let _ = peri;
+
+        // Enable DMA clock
+        crate::pac::CMU.hfbusclken0().modify(|w| w.set_ldma(true));
+
+        // Enable the LDMA error interrupt so transfer errors are detected
+        // immediately. Without this, a DMA bus error sets the ERROR flag in
+        // LDMA_IF but no interrupt fires (the channel DONE flag is NOT set on
+        // error), and the transfer hangs indefinitely.
+        // See LDMA reference manual §7.3.5 "Managing Transfer Errors".
+        mmio::ien_error_enable();
+
+        unsafe {
+            cortex_m::peripheral::NVIC::unmask(Interrupt::LDMA);
+        }
+
+        // SAFETY: each channel operates on a distinct LDMA channel register set; the
+        // stolen singletons are disjoint by channel number.
+        Self {
+            ch0: DmaChannel::new(ChannelId::Ch0, unsafe { *peripherals::Ldma::steal() }),
+            ch1: DmaChannel::new(ChannelId::Ch1, unsafe { *peripherals::Ldma::steal() }),
+            ch2: DmaChannel::new(ChannelId::Ch2, unsafe { *peripherals::Ldma::steal() }),
+            ch3: DmaChannel::new(ChannelId::Ch3, unsafe { *peripherals::Ldma::steal() }),
+            ch4: DmaChannel::new(ChannelId::Ch4, unsafe { *peripherals::Ldma::steal() }),
+            ch5: DmaChannel::new(ChannelId::Ch5, unsafe { *peripherals::Ldma::steal() }),
+            ch6: DmaChannel::new(ChannelId::Ch6, unsafe { *peripherals::Ldma::steal() }),
+            ch7: DmaChannel::new(ChannelId::Ch7, unsafe { *peripherals::Ldma::steal() }),
+        }
+    }
+}
+
+/// DMA channel singleton
+///
+/// Each channel holds a copy of the LDMA peripheral singleton (a zero-sized type), ensuring
+/// the peripheral ownership is tied to the channel's lifetime.
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct DmaChannel {
+    /// LDMA peripheral singleton (ownership token)
+    _peri: peripherals::Ldma,
+    /// Channel ID
+    id: ChannelId,
+}
+
+impl DmaChannel {
+    /// Create a new DMA channel with the given ID and peripheral singleton.
+    pub(crate) fn new(id: ChannelId, peri: peripherals::Ldma) -> Self {
+        Self { _peri: peri, id }
+    }
+
+    /// Reset channel to a known state
+    pub fn reset(&mut self) {
+        self.cancel();
+
+        mmio::ctrl_syncprsseten_clear(self.id);
+        mmio::ctrl_syncprsclren_clear(self.id);
+        mmio::sync_clear(self.id);
+        mmio::dbghalt_clear(self.id);
+        mmio::reqdis_clear(self.id);
+        mmio::reqclear_set(self.id);
+        mmio::set_reqsel(self.id, ChReqSel::None);
+
+        // TODO: LDMA_CHx_CFG, LDMA_CHx_LOOP
+    }
+
+    /// Get the DMA channel ID
+    pub fn id(&self) -> ChannelId {
+        self.id
+    }
+
+    /// Get channel enabled
+    pub fn enabled(&self) -> bool {
+        mmio::chen(self.id)
+    }
+
+    /// Enable/Disable DMA channel
+    pub fn set_enabled(&self, is_enabled: bool) {
+        if is_enabled {
+            mmio::chen_set(self.id());
+        } else {
+            mmio::chen_clear(self.id());
+        }
+    }
+
+    /// Get channel busy
+    pub fn busy(&self) -> bool {
+        mmio::ch_busy(self.id)
+    }
+
+    /// Get channel done
+    pub fn done(&self) -> bool {
+        mmio::ch_done(self.id)
+    }
+
+    /// Set channel done
+    pub fn set_done(&self, is_done: bool) {
+        if is_done {
+            mmio::ch_done_set(self.id)
+        } else {
+            mmio::ch_done_clear(self.id)
+        }
+    }
+
+    /// Get the channel Peripheral Request selection
+    pub fn peripheral_req(&self) -> ChReqSel {
+        // # Safety
+        //
+        // The `LDMA_CHx_REQSEL` can only be written with a safe function from this crate.
+        // If the retrieved value is invalid (cannot be converted to `ChReqSel`), then it is reasonable to assume it
+        // will have no effect on the peripheral so returning `ChReqSel::None` (the default for `ChReqSel`) makes sense
+        mmio::reqsel(self.id).unwrap_or_default()
+    }
+
+    /// Set the channel Peripheral Request selection
+    pub fn set_peripheral_req(&self, source: ChReqSel) {
+        mmio::set_reqsel(self.id, source);
+    }
+
+    /// Get channel interrupt enabled
+    pub fn ien(&self) -> bool {
+        mmio::ien(self.id)
+    }
+
+    /// Set channel interrupt enabled
+    pub fn set_ien(&self, is_enabled: bool) {
+        if is_enabled {
+            mmio::ien_set(self.id);
+        } else {
+            mmio::ien_clear(self.id);
+        }
+    }
+
+    /// Clear the interrupt flag for this channel
+    pub fn clear_interrupt_flags(&self) {
+        mmio::ifc_set(self.id);
+    }
+
+    /// Enable channel halt during debugger breakpoint
+    pub fn set_dbg_halt(&self) {
+        mmio::dbghalt_set(self.id);
+    }
+
+    /// Get channel loop count value
+    pub fn ch_loop(&self) -> u8 {
+        mmio::ch_loop(self.id)
+    }
+
+    /// Set channel loop count value
+    pub fn set_ch_loop(&self, loop_count: u8) {
+        mmio::ch_loop_set(self.id, loop_count);
+    }
+
+    /// Set/clear the ignore single requests flag.
+    ///
+    /// The channel arbiter will ignore single requests (SREQ) and only respond to multiple requests (REQ) when this bit
+    /// is set.
+    pub fn set_ignore_single_req(&self, is_ignored: bool) {
+        mmio::ch(self.id).ctrl().modify(|w| {
+            if is_ignored {
+                w.set_ignoresreq(true)
+            } else {
+                w.set_ignoresreq(false)
+            }
+        });
+    }
+
+    /// Start the DMA transfer by executing the Transfer LINK Descriptor written to the DMA Channel
+    ///
+    /// This which will trigger loading the first descriptor in the descriptor list whose address is in the LINK
+    /// register
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the descriptor is valid (addresses point
+    /// to accessible memory, transfer size does not exceed buffer bounds, link (if it exists) points to a valid
+    /// descriptor list, etc).
+    pub unsafe fn link_load(&self) {
+        mmio::ch_link_load(self.id)
+    }
+
+    /// Write a descriptor to the channel DMA descriptor registers.
+    ///
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the descriptor is valid (addresses point
+    /// to accessible memory, transfer size does not exceed buffer bounds, link (if it exists) points to a valid
+    /// descriptor list, etc).
+    ///
+    pub unsafe fn set_descriptor(&self, desc: TransferDescriptor) {
+        mmio::ch_write_descriptor(self.id, &desc.into_inner());
+    }
+
+    /// Enable a DMA transfer and optionally (software) trigger it.
+    ///
+    /// NOTE: This will cancel any ongoing transfers. You can use [`DmaChannel::enabled()`] to determine if a transfer
+    ///       is ongoing.
+    ///
+    /// # Safety
+    ///
+    /// The user must ensure that the given [`TransferDescriptor`] and the linked descriptor list it may point to is not
+    /// unsafe. The [`crate::dma::list`] module offers a descriptor list builder [`crate::dma::list::DescList`] which
+    /// helps with safety but it can't guarantee that the linked descriptors point to valid memory, or that the
+    /// underlying list storage has appropriate lifetime relative to the DMA transfer lifetime.
+    pub unsafe fn raw_transfer(&mut self, desc: &TransferDescriptor, with_sw_trigger: bool) {
+        // cancel any on-going transfers
+        self.cancel();
+
+        // Set the non-blocking IRQ handler
+        critical_section::with(|cs| {
+            set_handler(cs, self.id(), |id, transfer_result| {
+                #[cfg(feature = "debug-spi-dma-defmt-info")]
+                info!("IRQ {}: {}", id, transfer_result);
+
+                // signal to the main thread that transfer is resolved
+                critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
+            })
+        });
+
+        self.start(desc, with_sw_trigger);
+    }
+
+    /// Method used by DMA-compatible peripherals to do transfers.
+    pub(crate) fn peripheral_transfer<'tl, P: TransferParams<'tl>>(
+        &'tl mut self,
+        desc: &TransferDescriptor,
+        with_sw_trigger: bool,
+        params: P,
+    ) -> Result<ChannelTransfer<'tl, P>, DmaError> {
+        // cancel any on-going transfers
+        self.cancel();
+
+        // Set the non-blocking IRQ handler
+        critical_section::with(|cs| {
+            set_handler(cs, self.id(), |id, transfer_result| {
+                #[cfg(feature = "debug-spi-dma-defmt-info")]
+                info!("IRQ {}: {}", id, transfer_result);
+
+                // signal to the main thread that transfer is resolved
+                critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
+            })
+        });
+
+        unsafe { self.start(desc, with_sw_trigger) };
+
+        Ok(ChannelTransfer::new(self, params))
+    }
+
+    /// Method used by DMA-compatible peripherals to do zero-sized transfers.
+    ///
+    /// Compared to the `peripheral_transfer` method, this does not actually start the DMA transfer, and therefore the
+    /// corresponding DMA irq will not fire. Instead it just sets the Ok transfer result in the DmaChannel channel,
+    /// so that the transfer will resolve successfuly on the first poll with [`ChannelTransfer::try_resolve()`]
+    pub(crate) fn dummy_peripheral_transfer<'tl, P: TransferParams<'tl>>(
+        &'tl mut self,
+        params: P,
+    ) -> Result<ChannelTransfer<'tl, P>, DmaError> {
+        // cancel any on-going transfers
+        self.cancel();
+
+        // Set the "Done" token
+        critical_section::with(|cs| {
+            irq::irq_ch_set(cs, self.id, Some(Ok(())));
+        });
+
+        Ok(ChannelTransfer::new(self, params))
+    }
+
+    /// Start a memory-to-memory DMA transfer.
+    ///
+    /// If a linked descriptor list is needed, then the `dst` is used as storage. This allows transfers of any length.
+    ///
+    /// The returned [`ChannelTransfer`](transfer::ChannelTransfer) token takes a mutable reference to the channel,
+    /// preventing its use while the transfer is ongoing.
+    ///
+    /// If the `ChannelTransfer` is dropped while the DMA channel is still active, then the transfer is canceled leaving
+    /// the contents of `dst` in an undefined state (it may contain parts of the linked descriptor list).
+    ///
+    /// Only drop the transfer _after_ resolving it.
+    /// See [`ChannelTransfer::try_resolve()`](`transfer::ChannelTransfer::try_resolve`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DmaError::BufferMismatch`] if `src` and `dst` have different lengths.
+    ///
+    /// # Examples
+    ///
+    /// Scoped:
+    ///
+    /// ```rust,no_run
+    ///     let transfer_result = {
+    ///         let mut transfer = ch.memory_transfer(src, dst)?;
+    ///         loop {
+    ///             if let Some(res) = transfer.try_resolve() {
+    ///                 break res;
+    ///             }
+    ///         }
+    ///     };
+    ///     // `ch`, `src` and `dst` can now be used again
+    /// ```
+    /// Or with manual drop:
+    ///
+    /// ```rust,no_run
+    ///     let mut transfer = ch.memory_transfer(src, dst)?;
+    ///     let transfer_result = loop {
+    ///         if let Some(res) = transfer.try_resolve() {
+    ///             break res;
+    ///         }
+    ///     };
+    ///
+    ///     drop(transfer);
+    ///     // `ch`, `src` and `dst` can now be used again
+    /// ```
+    pub fn memory_transfer<'tl, Word: Copy + 'static>(
+        &'tl mut self,
+        src: &'tl [Word],
+        dst: &'tl mut [Word],
+    ) -> Result<ChannelTransfer<'tl, MemoryTransferParams<'tl, Word>>, DmaError> {
+        if src.len() != dst.len() {
+            return Err(DmaError::BufferMismatch);
+        }
+
+        self.cancel();
+
+        let byte_count = core::mem::size_of_val(src);
+
+        // Handle 0 sized transfers: set a dummy success token and skip hardware setup
+        if byte_count == 0 {
+            critical_section::with(|cs| irq::irq_ch_set(cs, self.id(), Some(Ok(()))));
+            return Ok(ChannelTransfer::new(
+                self,
+                MemoryTransferParams { src, dst },
+            ));
+        }
+
+        // Set the IRQ handler for this channel transfer
+        critical_section::with(|cs| {
+            set_handler(cs, self.id(), |id, transfer_result| {
+                #[cfg(feature = "debug-spi-dma-defmt-info")]
+                info!("IRQ {}: {}", id, transfer_result);
+
+                // signal to the main thread that transfer is resolved
+                critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
+            })
+        });
+
+        // Decide which unit/type the transfer may use
+        let unit = if src.as_ptr().addr().is_multiple_of(size_of::<u32>())
+            && dst.as_ptr().addr().is_multiple_of(size_of::<u32>())
+            && src.len().is_multiple_of(size_of::<u32>())
+            && dst.len().is_multiple_of(size_of::<u32>())
+        {
+            UnitSize::Word
+        } else if src.as_ptr().addr().is_multiple_of(size_of::<u16>())
+            && dst.as_ptr().addr().is_multiple_of(size_of::<u16>())
+            && src.len().is_multiple_of(size_of::<u16>())
+            && dst.len().is_multiple_of(size_of::<u16>())
+        {
+            UnitSize::Halfword
+        } else {
+            UnitSize::Byte
+        };
+
+        let dst_bytes: &mut [u8] =
+            unsafe { core::slice::from_raw_parts_mut(dst.as_ptr() as *mut u8, byte_count) };
+
+        assert_eq!(byte_count, core::mem::size_of_val(dst_bytes));
+        assert_ne!(dst_bytes.len(), 0);
+
+        let unit_byte_size = 1 << unit as u8;
+        let total_units = dst_bytes.len() / unit_byte_size;
+        assert_eq!(dst_bytes.len() % unit_byte_size, 0);
+
+        let arr_end = dst_bytes[dst_bytes.len()..].as_ptr().addr();
+        let aligned_end_addr = arr_end - (arr_end % align_of::<Descriptor>());
+
+        let last_descr_addr = aligned_end_addr - size_of::<Descriptor>();
+        let last_chunk_min_units = (arr_end - last_descr_addr) / unit_byte_size;
+        assert_eq!((arr_end - last_descr_addr) % unit_byte_size, 0);
+
+        let descr_count = total_units.div_ceil(Descriptor::MAX_TRANSFER_UNITS);
+
+        // First descriptor will be written to DMA channel register, not to the descriptor list
+        let linked_list_count = descr_count - 1;
+        let linked_list_start_addr =
+            aligned_end_addr - (linked_list_count * size_of::<Descriptor>());
+        // Create the descriptor list at the end of the destination buffer
+        let descriptor_list = unsafe {
+            core::slice::from_raw_parts_mut(
+                linked_list_start_addr as *mut Descriptor,
+                linked_list_count,
+            )
+        };
+
+        let first_descriptor = build_m2m_descriptors(
+            src.as_ptr().addr(),
+            dst.as_ptr().addr(),
+            total_units,
+            last_chunk_min_units,
+            descriptor_list,
+            unit,
+        );
+
+        // Start the transfer. The descriptor was built safely by `build_descriptors`.
+        unsafe { self.start(&first_descriptor, true) };
+
+        Ok(ChannelTransfer::new(
+            self,
+            MemoryTransferParams { src, dst },
+        ))
+    }
+
+    /// Cancel any on-going transfer
+    pub fn cancel(&mut self) {
+        self.stop();
+
+        // Clear the IRQ handler and any pending result
+        critical_section::with(|cs| {
+            irq::clear_handler(cs, self.id);
+            let _ = irq::irq_ch_take(cs, self.id);
+        });
+    }
+
+    /// Enable the DMA transfer by executing the `TransferDescriptor` written to the DMA Channel, and software-trigger
+    /// it if `with_sw_trigger` is set.
+    ///
+    /// If a descriptor list is linked, it will be executed after the `TransferDescriptor` has finished
+    unsafe fn start(&mut self, desc: &TransferDescriptor, with_sw_trigger: bool) {
+        self.set_descriptor(*desc);
+        self.set_ien(true);
+        self.set_enabled(true);
+        if with_sw_trigger {
+            mmio::swreq(self.id);
+        }
+    }
+
+    /// Disable the DMA transfer.
+    fn stop(&mut self) {
+        self.set_ien(false);
+        self.clear_interrupt_flags();
+        self.set_enabled(false);
+        self.set_done(false);
+    }
+}
+
+/// DMA channel identifier
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ChannelId {
+    /// Channel 0
+    Ch0,
+    /// Channel 1
+    Ch1,
+    /// Channel 2
+    Ch2,
+    /// Channel 3
+    Ch3,
+    /// Channel 4
+    Ch4,
+    /// Channel 5
+    Ch5,
+    /// Channel 6
+    Ch6,
+    /// Channel 7
+    Ch7,
+}
+
+impl ChannelId {
+    /// Bitmask for the maximum value of a `ChannelId`
+    const MASK_VALUE: u8 = {
+        assert!(
+            CHANNEL_COUNT.count_ones() == 1,
+            "CHANNEL_COUNT must be a power of `2` otherwise the subtraction below won't work"
+        );
+
+        CHANNEL_COUNT as u8 - 1
+    };
+
+    /// Get a `ChannelId` from a u8
+    ///
+    /// The caller must make sure the given `val` is valid.
+    pub(crate) fn from_u8_unchecked(val: u8) -> Self {
+        match val & Self::MASK_VALUE {
+            0 => Self::Ch0,
+            1 => Self::Ch1,
+            2 => Self::Ch2,
+            3 => Self::Ch3,
+            4 => Self::Ch4,
+            5 => Self::Ch5,
+            6 => Self::Ch6,
+            7 => Self::Ch7,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Channel Peripheral Request Select
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[repr(u16)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ChReqSel {
+    /// No source selected
+    #[default]
+    None = 0,
+    /// Peripheral Reflex System, PRSREQ0
+    PrsReq0 = 0x10,
+    /// Peripheral Reflex System, PRSREQ1
+    PrsReq1 = 0x11,
+    /// Analog to Digital Converter 0, ADC0SINGLE REQ/SREQ
+    Adc0Single = 0x80,
+    /// Analog to Digital Converter 0, ADC0SCAN REQ/SREQ
+    Adc0Scan = 0x81,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 0
+    /// USART0RXDATAV REQ/SREQ
+    Usart0RxDataAvl = 0xC0,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 0
+    /// USART0TXBL REQ/SREQ
+    Usart0TxBl = 0xC1,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 0
+    /// USART0TXEMPTY
+    Usart0TxEmpty = 0xC2,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 1
+    /// USART1RXDATAV REQ/SREQ
+    Usart1RxDataAvl = 0xD0,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 1
+    /// USART1TXBL REQ/SREQ
+    Usart1TxBl = 0xD1,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 1
+    /// USART1TXEMPTY
+    Usart1TxEmpty = 0xD2,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 1
+    /// USART1RXDATAVRIGHT REQ/SREQ
+    Usart1RxDataAvlRight = 0xD3,
+    /// Universal Synchronous/Asynchronous Receiver/Transmitter 1
+    /// USART1TXBLRIGHT REQ/SREQ
+    Usart1TxBlRight = 0xD4,
+    /// Low Energy UART 0
+    /// LEUART0RXDATAV
+    LeUart0RxDataAvl = 0x100,
+    /// Low Energy UART 0
+    /// LEUART0TXBL
+    LeUart0TxBl = 0x101,
+    /// Low Energy UART 0
+    /// LEUART0TXEMPTY
+    LeUart0TxEmpty = 0x102,
+    /// I2C 0
+    /// I2C0RXDATAV REQ/SREQ
+    I2C0RxDataAvl = 0x140,
+    /// I2C 0
+    /// I2C0TXBL REQ/SREQ
+    I2C0TxBl = 0x141,
+    /// Timer 0
+    /// TIMER0UFOF
+    Timer0UfOf = 0x180,
+    /// Timer 0
+    /// TIMER0CC0
+    Timer0Cc0 = 0x181,
+    /// Timer 0
+    /// TIMER0CC1
+    Timer0Cc1 = 0x182,
+    /// Timer 0
+    /// TIMER0CC2
+    Timer0Cc2 = 0x183,
+    /// Timer 1
+    /// TIMER1UFOF
+    Timer1UfOf = 0x190,
+    /// Timer 1
+    /// TIMER1CC0
+    Timer1Cc0 = 0x191,
+    /// Timer 1
+    /// TIMER1CC1
+    Timer1Cc1 = 0x192,
+    /// Timer 1
+    /// TIMER1CC2
+    Timer1Cc2 = 0x193,
+    /// Timer 1
+    /// TIMER1CC3
+    Timer1Cc3 = 0x194,
+    /// Memory System Controller
+    /// MSCWDATA
+    MscWData = 0x300,
+    /// Advanced Encryption Standard Accelerator
+    /// CRYPTODATA0WR
+    CryptoData0Wr = 0x310,
+    /// Advanced Encryption Standard Accelerator
+    /// CRYPTODATA0XWR
+    CryptoData0XWr = 0x311,
+    /// Advanced Encryption Standard Accelerator
+    /// CRYPTODATA0RD
+    CryptoData0Rd = 0x312,
+    /// Advanced Encryption Standard Accelerator
+    /// CRYPTODATA1WR
+    CryptoData1Wr = 0x313,
+    /// Advanced Encryption Standard Accelerator
+    /// CRYPTODATA1RD
+    CryptoData1Rd = 0x314,
+}
+
+impl TryFrom<u16> for ChReqSel {
+    type Error = DmaError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::None),
+            0x10 => Ok(Self::PrsReq0),
+            0x11 => Ok(Self::PrsReq1),
+            0x80 => Ok(Self::Adc0Single),
+            0x81 => Ok(Self::Adc0Scan),
+            0xC0 => Ok(Self::Usart0RxDataAvl),
+            0xC1 => Ok(Self::Usart0TxBl),
+            0xC2 => Ok(Self::Usart0TxEmpty),
+            0xD0 => Ok(Self::Usart1RxDataAvl),
+            0xD1 => Ok(Self::Usart1TxBl),
+            0xD2 => Ok(Self::Usart1TxEmpty),
+            0xD3 => Ok(Self::Usart1RxDataAvlRight),
+            0xD4 => Ok(Self::Usart1TxBlRight),
+            0x100 => Ok(Self::LeUart0RxDataAvl),
+            0x101 => Ok(Self::LeUart0TxBl),
+            0x102 => Ok(Self::LeUart0TxEmpty),
+            0x140 => Ok(Self::I2C0RxDataAvl),
+            0x141 => Ok(Self::I2C0TxBl),
+            0x180 => Ok(Self::Timer0UfOf),
+            0x181 => Ok(Self::Timer0Cc0),
+            0x182 => Ok(Self::Timer0Cc1),
+            0x183 => Ok(Self::Timer0Cc2),
+            0x190 => Ok(Self::Timer1UfOf),
+            0x191 => Ok(Self::Timer1Cc0),
+            0x192 => Ok(Self::Timer1Cc1),
+            0x193 => Ok(Self::Timer1Cc2),
+            0x194 => Ok(Self::Timer1Cc3),
+            0x300 => Ok(Self::MscWData),
+            0x310 => Ok(Self::CryptoData0Wr),
+            0x311 => Ok(Self::CryptoData0XWr),
+            0x312 => Ok(Self::CryptoData0Rd),
+            0x313 => Ok(Self::CryptoData1Wr),
+            0x314 => Ok(Self::CryptoData1Rd),
+            _ => Err(DmaError::InvalidMMIO),
+        }
+    }
+}
+
+/// DMA Error
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum DmaError {
+    /// The value in a DMA MMIO register is invalid
+    InvalidMMIO,
+    /// Invalid transfer size (e.g. transfer size is `0`)
+    InvalidTransferSize,
+    /// DMA transfer failed
+    Transfer,
+    /// Descriptor list is invalid (e.g empty)
+    InvalidDescriptorList,
+    /// Descriptor list overflowed
+    DescriptorListOverflow,
+    /// Source and destination buffers have different lengths
+    BufferMismatch,
+}
+
+/// Build the first transfer descriptor, and any necessary linked descriptors for a memory-to-memory transfer
+fn build_m2m_descriptors(
+    src_addr: usize,
+    dst_addr: usize,
+    total_units: usize,
+    last_chunk_min_units: usize,
+    descriptor_list: &mut [Descriptor],
+    unit: UnitSize,
+) -> TransferDescriptor {
+    let mut remaining_units = total_units;
+
+    // Create first descriptor
+    let first_descr_units = if remaining_units > Descriptor::MAX_TRANSFER_UNITS {
+        Descriptor::MAX_TRANSFER_UNITS.min(remaining_units - last_chunk_min_units)
+    } else {
+        remaining_units
+    };
+    remaining_units -= first_descr_units;
+
+    let first_descriptor = {
+        let mut descr_builder = TransferDescriptor::new(
+            Addr::Absolute(src_addr),
+            Addr::Absolute(dst_addr),
+            first_descr_units.try_into().unwrap(),
+            unit,
+        )
+        .with_struct_req(true)
+        .with_block_size(descriptor::BlockSize::All);
+
+        if remaining_units > 0 {
+            descr_builder =
+                descr_builder.with_link(Addr::Absolute(descriptor_list.as_ptr().addr()), true);
+        }
+
+        descr_builder
+    };
+
+    // Fill in the linked descriptors
+    let descriptor_list_count = descriptor_list.len();
+    for (i, ser_descr) in descriptor_list.iter_mut().enumerate() {
+        let is_last = i == (descriptor_list_count - 1);
+
+        let descr_units = if is_last {
+            remaining_units
+        } else {
+            Descriptor::MAX_TRANSFER_UNITS.min(remaining_units - last_chunk_min_units)
+        };
+        assert!(descr_units <= Descriptor::MAX_TRANSFER_UNITS);
+
+        let addr_offset = (total_units - remaining_units) * unit.byte_count();
+
+        let mut transfer_descr = TransferDescriptor::new(
+            Addr::Absolute(src_addr + addr_offset),
+            Addr::Absolute(dst_addr + addr_offset),
+            descr_units.try_into().unwrap(),
+            unit,
+        )
+        .with_struct_req(true)
+        .with_block_size(descriptor::BlockSize::All);
+
+        if !is_last {
+            transfer_descr = transfer_descr.with_link(Addr::Relative(1), true);
+        }
+
+        *ser_descr = transfer_descr.into_inner();
+        remaining_units -= descr_units;
+    }
+    assert_eq!(remaining_units, 0);
+
+    // make sure all linked descriptors have been written before proceeding
+    cortex_m::asm::dsb();
+
+    first_descriptor
+}
