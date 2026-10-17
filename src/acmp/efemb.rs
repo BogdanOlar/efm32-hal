@@ -9,7 +9,7 @@ static ACMP_WAKERS: [embassy_sync::waitqueue::AtomicWaker; AcmpId::COUNT] =
     [const { embassy_sync::waitqueue::AtomicWaker::new() }; _];
 static ACMP_RAW_FLAGS: [AtomicU32; AcmpId::COUNT] = [const { AtomicU32::new(0) }; _];
 
-pub(crate) fn async_handler<const PN: u8>(flags: Interrupts) {
+pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
     let old = ACMP_RAW_FLAGS[PN as usize].swap(flags.into(), core::sync::atomic::Ordering::SeqCst);
 
     if old != 0 {
@@ -19,17 +19,17 @@ pub(crate) fn async_handler<const PN: u8>(flags: Interrupts) {
     ACMP_WAKERS[PN as usize].wake();
 }
 
-pub(crate) struct AcmpWaker<'d, T: AcmpInstance> {
+pub(super) struct InterruptsFuture<'d, T: AcmpInstance> {
     peri: Peri<'d, T>,
 }
 
-impl<'d, T: AcmpInstance> AcmpWaker<'d, T> {
-    pub(crate) fn new(peri: Peri<'d, T>) -> Self {
+impl<'d, T: AcmpInstance> InterruptsFuture<'d, T> {
+    pub(super) fn new(peri: Peri<'d, T>) -> Self {
         Self { peri }
     }
 }
 
-impl<'d, T: AcmpInstance> core::future::Future for AcmpWaker<'d, T> {
+impl<'d, T: AcmpInstance> core::future::Future for InterruptsFuture<'d, T> {
     type Output = Interrupts;
 
     fn poll(

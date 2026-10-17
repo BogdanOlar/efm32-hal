@@ -1,7 +1,6 @@
 //! Timer IRQs
 //!
 
-#[cfg(feature = "efemb")]
 use crate::timer::Interrupts;
 use crate::{
     pac::{interrupt, timer::regs::Ifs},
@@ -11,10 +10,10 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 
 /// Handler which does nothing
-pub(crate) const fn default_handler(_: Interrupts, _: crate::pac::timer::Timer) {}
+pub(super) const fn default_handler(_: Interrupts, _: crate::pac::timer::Timer) {}
 
 /// Interrupt handlers for timers
-pub(crate) static TIMER_HANDLER: [Mutex<RefCell<TimerIrqHandler>>; TimerId::COUNT] = [
+pub(super) static TIMER_HANDLER: [Mutex<RefCell<TimerIrqHandler>>; TimerId::COUNT] = [
     Mutex::new(RefCell::new(default_handler)),
     Mutex::new(RefCell::new(default_handler)),
 ];

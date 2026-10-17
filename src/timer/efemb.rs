@@ -9,7 +9,7 @@ static TIMER_WAKERS: [embassy_sync::waitqueue::AtomicWaker; TimerId::COUNT] =
     [const { embassy_sync::waitqueue::AtomicWaker::new() }; _];
 static TIMER_RAW_FLAGS: [AtomicU32; TimerId::COUNT] = [const { AtomicU32::new(0) }; _];
 
-pub(crate) fn async_handler<const PN: u8>(flags: Interrupts) {
+pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
     let old = TIMER_RAW_FLAGS[PN as usize].swap(flags.into(), core::sync::atomic::Ordering::SeqCst);
 
     if old != 0 {
@@ -19,17 +19,17 @@ pub(crate) fn async_handler<const PN: u8>(flags: Interrupts) {
     TIMER_WAKERS[PN as usize].wake();
 }
 
-pub(crate) struct TimerWaker<'d, T: TimerInstance> {
+pub(super) struct InterruptsFuture<'d, T: TimerInstance> {
     peri: Peri<'d, T>,
 }
 
-impl<'d, T: TimerInstance> TimerWaker<'d, T> {
-    pub(crate) fn new(peri: Peri<'d, T>) -> Self {
+impl<'d, T: TimerInstance> InterruptsFuture<'d, T> {
+    pub(super) fn new(peri: Peri<'d, T>) -> Self {
         Self { peri }
     }
 }
 
-impl<'d, T: TimerInstance> core::future::Future for TimerWaker<'d, T> {
+impl<'d, T: TimerInstance> core::future::Future for InterruptsFuture<'d, T> {
     type Output = Interrupts;
 
     fn poll(

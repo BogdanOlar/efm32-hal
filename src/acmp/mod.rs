@@ -5,7 +5,7 @@ pub mod efemb;
 pub mod irq;
 
 use crate::{
-    acmp::{efemb::AcmpWaker, irq::default_handler},
+    acmp::irq::default_handler,
     pac::acmp::vals::{Csressel, HysteresisHyst, Vasel},
     peripherals, Sealed, SingleCycleRMW,
 };
@@ -252,7 +252,7 @@ impl<'d, T: AcmpInstance> Acmp<'d, T> {
     /// Async await for any enabled interrupt(s)
     #[cfg(feature = "efemb")]
     pub async fn interrupts(&self) -> Interrupts {
-        AcmpWaker::new(unsafe { self.peri.clone_unchecked() }).await
+        efemb::InterruptsFuture::new(unsafe { self.peri.clone_unchecked() }).await
     }
 
     pub(crate) fn set_irq_handler(&mut self, handler: AcmpIrqHandler) {

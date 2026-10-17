@@ -238,7 +238,7 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
     /// Async await for timer interrupt
     #[cfg(feature = "efemb")]
     pub async fn interrupt(&self) -> Interrupts {
-        efemb::TimerWaker::new(unsafe { self.peri.clone_unchecked() }).await
+        efemb::InterruptsFuture::new(unsafe { self.peri.clone_unchecked() }).await
     }
 
     pub(crate) fn set_irq_handler(&mut self, handler: TimerIrqHandler) {

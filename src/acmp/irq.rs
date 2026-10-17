@@ -1,7 +1,6 @@
 //! Acmp IRQs
 //!
 
-#[cfg(feature = "efemb")]
 use crate::acmp::Interrupts;
 use crate::{
     acmp::{AcmpId, AcmpIrqHandler},
@@ -11,10 +10,10 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 
 /// Handler which does nothing
-pub(crate) const fn default_handler(_: Interrupts, _: crate::pac::acmp::Acmp) {}
+pub(super) const fn default_handler(_: Interrupts, _: crate::pac::acmp::Acmp) {}
 
 /// Interrupt handlers for timers
-pub(crate) static ACMP_HANDLER: [Mutex<RefCell<AcmpIrqHandler>>; AcmpId::COUNT] =
+pub(super) static ACMP_HANDLER: [Mutex<RefCell<AcmpIrqHandler>>; AcmpId::COUNT] =
     [Mutex::new(RefCell::new(default_handler))];
 
 fn acmp_regs<const PN: u8>() -> crate::pac::acmp::Acmp {
