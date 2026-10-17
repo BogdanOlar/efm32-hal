@@ -2,7 +2,7 @@
 name = "efm32-hal"
 version = "0.1.0"
 authors = ["Bogdan Olar <olar.bogdan.dev@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "Hardware abstraction layer (HAL) for Silicon Labs EFM32PG1B and EFM32GG11 microcontrollers"
 keywords = ["embedded-hal", "efm32", "hal", "silabs"]
 categories = ["embedded", "hardware-support", "no-std"]
