@@ -3,12 +3,12 @@
 
 #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
 use crate::gpio::{
+    OutPp,
     erased::ErasedPin,
     pin::mode::{Out, PushPull},
-    OutPp,
 };
 use crate::{
-    pac::{interrupt, Interrupt, CMU},
+    pac::{CMU, Interrupt, interrupt},
     timer_le::mmio::{self, Command, InterruptFlag},
 };
 use core::{
@@ -178,7 +178,7 @@ impl Ticker {
 
             if dif < rem_of_count as u64 {
                 // alarm will occur before next timer overflow
-                let cnt = next % u16::MAX as u64;
+                let cnt = next % (u16::MAX as u64 + 1);
 
                 mmio::comp0_set(cnt as u16);
                 mmio::ienable(InterruptFlag::Comp0);
