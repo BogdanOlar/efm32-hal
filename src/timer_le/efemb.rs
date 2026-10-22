@@ -1,12 +1,6 @@
 //! Embassy time driver implementation for LeTimer
 //!
 
-#[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-use crate::gpio::{
-    OutPp,
-    erased::ErasedPin,
-    pin::mode::{Out, PushPull},
-};
 use crate::{
     pac::{CMU, Interrupt, interrupt},
     timer_le::mmio::{self, Command, InterruptFlag},
@@ -18,8 +12,6 @@ use core::{
 use critical_section::{CriticalSection, Mutex};
 use embassy_time_driver::Driver;
 use embassy_time_queue_utils::Queue;
-#[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-use embedded_hal::digital::OutputPin;
 
 /// Embassy time driver using LeTimer0 peripheral
 pub struct Ticker {
@@ -30,17 +22,12 @@ pub struct Ticker {
     is_init: AtomicBool,
     /// Waker queue
     queue: Mutex<RefCell<Queue>>,
-    /// Debug GPIO pins
-    #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-    dbg_pins: Mutex<RefCell<Option<DbgPins>>>,
 }
 
 embassy_time_driver::time_driver_impl!(static EFEMB_TIME_DRIVER: Ticker = Ticker{
     ovf_count:AtomicU32::new(0),
     is_init:AtomicBool::new(false),
     queue: Mutex::new(RefCell::new(Queue::new())),
-    #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-    dbg_pins: Mutex::new(RefCell::new(None))
 });
 
 impl Ticker {
@@ -79,23 +66,6 @@ impl Ticker {
         mmio::ienable(InterruptFlag::Underflow);
         mmio::ienable(InterruptFlag::Comp0);
 
-        #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-        {
-            use crate::gpio::Gpio;
-
-            let gpio = GPIO::new(crate::pac::GPIO);
-
-            let pins = DbgPins {
-                sched: gpio.pa0.into_mode::<OutPp>().into_erased_pin(),
-                isr: gpio.pa1.into_mode::<OutPp>().into_erased_pin(),
-                isr_ovf: gpio.pa2.into_mode::<OutPp>().into_erased_pin(),
-                isr_comp: gpio.pa3.into_mode::<OutPp>().into_erased_pin(),
-            };
-            critical_section::with(|cs| {
-                EFEMB_TIME_DRIVER.dbg_pins.replace(cs, Some(pins));
-            })
-        }
-
         // Enable the timer interrupt
         unsafe {
             cortex_m::peripheral::NVIC::unmask(Interrupt::LETIMER0);
@@ -111,34 +81,13 @@ impl Ticker {
     /// Handle LeTimer0 interrupt
     pub fn on_interrupt(&self) {
         critical_section::with(|cs| {
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            let mut pins_bound = self.dbg_pins.borrow(cs).borrow_mut();
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            {
-                if let Some(pins) = pins_bound.as_mut() {
-                    let _ = pins.isr.set_high();
-                }
-            }
-
             if mmio::if_get(InterruptFlag::Underflow) {
                 self.ovf_count.fetch_add(1, Ordering::Relaxed);
                 mmio::if_clear(InterruptFlag::Underflow);
-                #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-                {
-                    if let Some(pins) = pins_bound.as_mut() {
-                        let _ = pins.isr_ovf.set_high();
-                    }
-                }
             }
 
             if mmio::if_get(InterruptFlag::Comp0) {
                 mmio::if_clear(InterruptFlag::Comp0);
-                #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-                {
-                    if let Some(pins) = pins_bound.as_mut() {
-                        let _ = pins.isr_comp.set_high();
-                    }
-                }
             }
 
             if mmio::if_get(InterruptFlag::Comp1) {
@@ -152,15 +101,6 @@ impl Ticker {
 
                 if self.set_alarm(&cs, self.checked_now(&cs), next) {
                     break;
-                }
-            }
-
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            {
-                if let Some(pins) = pins_bound.as_mut() {
-                    let _ = pins.isr.set_low();
-                    let _ = pins.isr_ovf.set_low();
-                    let _ = pins.isr_comp.set_low();
                 }
             }
         });
@@ -234,15 +174,6 @@ impl Driver for Ticker {
 
     fn schedule_wake(&self, at: u64, waker: &core::task::Waker) {
         critical_section::with(|cs| {
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            let mut pins_bound = self.dbg_pins.borrow(cs).borrow_mut();
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            {
-                if let Some(pins) = pins_bound.as_mut() {
-                    let _ = pins.sched.set_high();
-                }
-            }
-
             let mut queue = self.queue.borrow(cs).borrow_mut();
             if queue.schedule_wake(at, waker) {
                 // Use the Comp1 interrupt flag to trigger the [`Ticker::on_interrupt()`] execution, which will handle
@@ -250,26 +181,6 @@ impl Driver for Ticker {
                 mmio::ienable(InterruptFlag::Comp1);
                 mmio::if_set(InterruptFlag::Comp1);
             }
-
-            #[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-            {
-                if let Some(pins) = pins_bound.as_mut() {
-                    let _ = pins.sched.set_low();
-                }
-            }
         });
     }
-}
-
-/// Debug pins used for debugging LeTimer0 when used as the embassy time [`Driver`]
-#[cfg(feature = "efemb-timdrv-letim0-dbg-pins")]
-pub struct DbgPins {
-    /// PA0 held high while [`Driver.schedule_wake()`] is being executed
-    sched: ErasedPin<Out<PushPull>>,
-    /// PA1 held high while [`Ticker.on_interrupt()`] is being executed
-    isr: ErasedPin<Out<PushPull>>,
-    /// PA2 held high while [`Ticker.on_interrupt()`] is being executed, and the timer overflow interrupt flag has been set
-    isr_ovf: ErasedPin<Out<PushPull>>,
-    /// PA3 held high while [`Ticker.on_interrupt()`] is being executed, and the timer comp0 interrupt flag has been set
-    isr_comp: ErasedPin<Out<PushPull>>,
 }

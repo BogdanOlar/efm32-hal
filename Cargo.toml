@@ -78,8 +78,6 @@ efemb = [
 efemb-timdrv-letim0-hz-32_768 = ["embassy-time-driver/tick-hz-32_768"]
 ## Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
 efemb-timdrv-letim0-hz-1_000 = ["embassy-time-driver/tick-hz-1_000"]
-# Debug pins showing when interrupt and schedule function are executed
-efemb-timdrv-letim0-dbg-pins = []
 # Debug option for DMA to set max transfer size to `1<<5` instead of `1<<12`
 dma-debug-max-transfer = []
 ## Compatibility with the [`crc`](https://github.com/mrhooray/crc-rs) crate, for supported (16 and 32 bit) CRC algorithms
@@ -157,7 +155,6 @@ required-features = ["efemb", "defmt"]
 
 [[example]]
 name = "embassy_example"
-# required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "efemb-timdrv-letim0-dbg-pins"]
 required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
 # required-features = ["efemb", "efemb-timdrv-letim0-hz-1_000"]
 

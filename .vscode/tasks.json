@@ -128,7 +128,7 @@
                 "build",
                 "--example",
                 "embassy_example",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768 efemb-timdrv-letim0-dbg-pins'"
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
