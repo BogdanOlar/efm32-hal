@@ -629,7 +629,10 @@ pub enum CmuClkOutId {
     Output1,
 }
 
+/// Location for CMU pin 0
+/// Pins which can be used as CMU output implement this trait
 pub trait CmuPin0 {
+    /// Location value
     fn loc(&self) -> u8;
 }
 
@@ -655,9 +658,10 @@ impl_clock_0_loc!(5, 'D', 14);
 impl_clock_0_loc!(6, 'F', 2);
 impl_clock_0_loc!(7, 'F', 7);
 
-/// TODO:
+/// Location for CMU pin 1
+/// Pins which can be used as CMU output implement this trait
 pub trait CmuPin1 {
-    /// TODO:
+    /// Location value
     fn loc(&self) -> u8;
 }
 
