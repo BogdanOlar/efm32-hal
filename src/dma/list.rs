@@ -2,11 +2,11 @@
 //!
 
 use crate::dma::{
+    ChannelId, DmaError,
     descriptor::{
         Addr, AddrInc, AddrMode, Descriptor, ImmediateDescriptor, LoopTransferDescriptor,
         StructType, SyncDescriptor, TransferCount, TransferDescriptor, UnitSize,
     },
-    ChannelId, DmaError,
 };
 use cortex_m::asm;
 
@@ -360,7 +360,7 @@ pub(crate) fn reduced(
             desc_list.push_linked(loop_desc)?;
         }
 
-        let mut tail_desc = TransferDescriptor::new(
+        let tail_desc = TransferDescriptor::new(
             Addr::Relative(0),
             Addr::Relative(0),
             TransferCount::MAX,
@@ -459,10 +459,7 @@ pub(crate) fn extended(
     if loop_count > 0 {
         desc_list.push_linked(ImmediateDescriptor::new(
             (loop_count - 1) as u32,
-            crate::dma::mmio::ch(dma_ch_id)
-                .loop_()
-                .as_ptr()
-                .addr(),
+            crate::dma::mmio::ch(dma_ch_id).loop_().as_ptr().addr(),
         ))?;
     }
 

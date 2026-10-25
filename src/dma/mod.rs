@@ -25,9 +25,9 @@ use crate::{
     pac::Interrupt,
     peripherals,
 };
-use embassy_hal_internal::{Peri, PeripheralType};
 #[cfg(feature = "debug-spi-dma-defmt-info")]
 use defmt::info;
+use embassy_hal_internal::Peri;
 
 /// Number of DMA channels
 const CHANNEL_COUNT: usize = 1 << 3;
@@ -288,7 +288,7 @@ impl DmaChannel {
             })
         });
 
-        self.start(desc, with_sw_trigger);
+        unsafe { self.start(desc, with_sw_trigger) };
     }
 
     /// Method used by DMA-compatible peripherals to do transfers.
@@ -497,7 +497,7 @@ impl DmaChannel {
     ///
     /// If a descriptor list is linked, it will be executed after the `TransferDescriptor` has finished
     unsafe fn start(&mut self, desc: &TransferDescriptor, with_sw_trigger: bool) {
-        self.set_descriptor(*desc);
+        unsafe { self.set_descriptor(*desc) };
         self.set_ien(true);
         self.set_enabled(true);
         if with_sw_trigger {

@@ -197,41 +197,53 @@ impl LoopTransferDescriptor {
         Self { descr }
     }
 
+    /// When a linked descriptor is loaded with this bit set, it will immediately trigger a transfer.
     pub const fn with_struct_req(mut self) -> Self {
         self.descr.struct_req_set(true);
         self
     }
 
+    /// This bit-field controls the number of unit data transfers per arbitration cycle
     pub const fn with_block_size(mut self, block_size: BlockSize) -> Self {
         self.descr.block_size_set(block_size);
         self
     }
 
+    /// For word and half-word transfers, setting this bit will swap all bytes of each word or half-word.
     pub const fn with_byte_swap(mut self) -> Self {
         self.descr.byte_swap_set(true);
         self
     }
 
+    /// Set interrupt flag on each loop completion
     pub const fn with_loop_done_ifs(mut self, is_done: bool) -> Self {
         self.descr.done_ifs_set(is_done);
         self
     }
 
+    /// `true`: One transfer request transfers all units as defined by the XFRCNT field.
+    /// `false`: The LDMA transfers one BLOCKSIZE per transfer request.
     pub const fn with_req_mode_all(mut self) -> Self {
         self.descr.req_mode_set(true);
         self
     }
 
+    /// The channel arbiter will ignore single requests (SREQ) and only respond to multiple requests (REQ) when this bit
+    /// is set.
     pub const fn with_ignore_single_requests(mut self) -> Self {
         self.descr.ignore_sreq_set(true);
         self
     }
 
+    /// This bit-field specifies the stride or number of unit data addresses to increment the source address after each
+    /// [`UnitSize`] of data is transferred.
     pub const fn with_src_inc(mut self, addr_inc: AddrInc) -> Self {
         self.descr.src_inc_set(addr_inc);
         self
     }
 
+    /// This bit-field specifies the stride or number of unit data addresses to increment the destination address after
+    /// each [`UnitSize`] of data is transferred.
     pub const fn with_dst_inc(mut self, addr_inc: AddrInc) -> Self {
         self.descr.dst_inc_set(addr_inc);
         self
@@ -276,31 +288,41 @@ impl SyncDescriptor {
         Self { descr }
     }
 
+    /// This bit-field is used to set corresponding bits within the SYNCTRIG bit-field.
     pub const fn with_syncset(mut self, bits: u8) -> Self {
         self.descr.with_syncset_set(bits);
         self
     }
 
+    /// This bit-field is used to clear corresponding bits within the SYNCTRIG field of the SYNC LDMA_SYNC register.
     pub const fn with_syncclr(mut self, bits: u8) -> Self {
         self.descr.with_syncclr_set(bits);
         self
     }
 
+    /// This bit-field serves as the SYNCTRIG match enable. A sync match triggers the load of the next linked DMA
+    /// structure as specified by link_mode, when: (SYNCTRIG & MATCHEN) == (MATCHVAL & MATCHEN).
     pub const fn with_matchen(mut self, bits: u8) -> Self {
         self.descr.with_matchen_set(bits);
         self
     }
 
+    /// This bit-field serves as the SYNCTRIG match value. A sync match triggers the load of the next linked DMA
+    /// structure as specified by link_mode, when: (SYNCTRIG & MATCHEN) == (MATCHVAL & MATCHEN).
     pub const fn with_matchval(mut self, bits: u8) -> Self {
         self.descr.with_matchval_set(bits);
         self
     }
 
+    /// Setting this bit will set the interrupt flag when the transfer is done, or linked in the case where the LINK bit
+    /// is set, or synchronized in the case of a SYNC transfer.
     pub const fn with_done_ifs(mut self, is_done: bool) -> Self {
         self.descr.done_ifs_set(is_done);
         self
     }
 
+    /// Use this flag to determine if another descriptor (placed immediatelly after it) needs to be loaded if the
+    /// DMA channel loop counter reaches `0`
     pub const fn with_link(mut self, addr: Addr, is_linked: bool) -> Self {
         self.descr.link_set(is_linked);
 
@@ -354,11 +376,15 @@ impl ImmediateDescriptor {
         Self { descr }
     }
 
+    /// Setting this bit will set the interrupt flag when the transfer is done, or linked in the case where the LINK bit
+    /// is set, or synchronized in the case of a SYNC transfer.
     pub const fn with_done_ifs(mut self, is_done: bool) -> Self {
         self.descr.done_ifs_set(is_done);
         self
     }
 
+    /// Use this flag to determine if another descriptor (placed immediatelly after it) needs to be loaded if the
+    /// DMA channel loop counter reaches `0`
     pub const fn with_link(mut self, addr: Addr, is_linked: bool) -> Self {
         self.descr.link_set(is_linked);
 

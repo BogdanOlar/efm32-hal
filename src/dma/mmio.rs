@@ -1,9 +1,9 @@
 //! Register-level DMA functions
 
-use crate::dma::descriptor::Descriptor;
-use crate::dma::{ChReqSel, ChannelId, DmaError, CHANNEL_COUNT};
-use crate::pac::ldma::Ldma;
 use crate::SingleCycleRMW;
+use crate::dma::descriptor::Descriptor;
+use crate::dma::{CHANNEL_COUNT, ChReqSel, ChannelId, DmaError};
+use crate::pac::ldma::Ldma;
 
 /// Disable "Synchronization PRS Set Enable"
 pub(crate) fn ctrl_syncprsseten_clear(id: ChannelId) {
@@ -86,7 +86,7 @@ pub(crate) fn ifc_set(id: ChannelId) {
 }
 
 pub(crate) fn ch_error() -> Option<ChannelId> {
-    if dma().if_().read().error() == true {
+    if dma().if_().read().error() {
         Some(ChannelId::from_u8_unchecked(
             dma().status().read().cherror(),
         ))
@@ -145,23 +145,6 @@ pub(crate) fn set_reqsel(id: ChannelId, source: ChReqSel) {
 
 pub(crate) fn ch_link_load(id: ChannelId) {
     dma().linkload().write(|w| w.set_linkload(1 << id as u8));
-}
-
-pub(crate) fn ch_req_mode_set(id: ChannelId, all: bool) {
-    ch(id).ctrl().modify(|w| w.set_reqmode(all));
-}
-
-/// WARNING: number of words actually transfered will be `cnt + 1`
-pub(crate) fn ch_xfer_cnt_set(id: ChannelId, cnt: u16) {
-    ch(id).ctrl().write(|w| w.set_xfercnt(cnt));
-}
-
-pub(crate) fn ch_src_set(id: ChannelId, addr: u32) {
-    ch(id).src().write_value(addr);
-}
-
-pub(crate) fn ch_dst_set(id: ChannelId, addr: u32) {
-    ch(id).dst().write_value(addr);
 }
 
 pub(crate) fn ch_write_descriptor(id: ChannelId, descr: &Descriptor) {

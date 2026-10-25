@@ -1,7 +1,7 @@
 //! DMA Channel transfer
 //!
 
-use crate::dma::{irq, ChannelId, DmaChannel, DmaResult};
+use crate::dma::{ChannelId, DmaChannel, DmaResult, irq};
 
 /// DMA channel transfer
 #[derive(Debug)]
@@ -9,12 +9,12 @@ pub struct ChannelTransfer<'tl, P: TransferParams<'tl>> {
     /// DMA channel
     pub(crate) ch: &'tl mut DmaChannel,
     /// DMA Channel transfer parameters.
-    params: P,
+    _params: P,
 }
 
 impl<'tl, P: TransferParams<'tl>> ChannelTransfer<'tl, P> {
-    pub(crate) fn new(ch: &'tl mut DmaChannel, params: P) -> Self {
-        Self { ch, params }
+    pub(crate) fn new(ch: &'tl mut DmaChannel, _params: P) -> Self {
+        Self { ch, _params }
     }
 
     /// Get the DMA Channel ID
@@ -71,15 +71,11 @@ pub struct MemoryTransferParams<'a, Word: Copy + 'static> {
 
 impl<'a, Word: Copy + 'static> TransferParams<'a> for MemoryTransferParams<'a, Word> {}
 
+/// DMA channel transfer with no transfer params
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NoParams {}
 impl<'tl> TransferParams<'tl> for NoParams {}
-impl NoParams {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
 
 /// Result type of a DMA transfer (both sync and async)
 pub type ChannelTransferResult<'a, W> =
