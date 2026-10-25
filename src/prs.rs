@@ -2,18 +2,18 @@
 
 pub use crate::pac::prs::vals::ChCtrlEdsel;
 use crate::{
+    Sealed,
     cmu::CmuClkOutId,
     gpio::exti::ExtiId,
     pac::{
+        CMU,
         prs::{
             regs::{ChCtrl, Ctrl, Routepen, Swlevel, Swpulse},
             vals::ChCtrlSourcesel,
         },
-        CMU,
     },
     peripherals, rtcc, timer,
     timer_le::{self},
-    Sealed,
 };
 use embassy_hal_internal::Peri;
 
@@ -124,6 +124,7 @@ impl<const CN: u8> Channel<CN> {
         ChannelId::from_u8_unchecked(CN)
     }
 
+    /// Select edge detection
     pub fn set_edge(&mut self, edge_sel: ChCtrlEdsel) {
         let r = Self::peri().ch_ctrl(CN as usize);
         r.modify(|w| w.set_edsel(edge_sel));
