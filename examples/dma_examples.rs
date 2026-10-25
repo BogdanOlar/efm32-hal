@@ -12,12 +12,12 @@ use defmt::{error, info};
 use defmt_rtt as _;
 use efm32_hal::{
     dma::{
+        Dma, DmaChannel, DmaError,
         descriptor::{
             Addr, AddrInc, BlockSize, Descriptor, SyncDescriptor, TransferCount,
             TransferDescriptor, UnitSize,
         },
         list::{DescList, FinMode},
-        Dma, DmaChannel, DmaError,
     },
     init,
     prelude::*,

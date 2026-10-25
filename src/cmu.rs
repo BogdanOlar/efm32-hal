@@ -1,13 +1,13 @@
 //! Clock Management Unit
 //!
 
-use crate::gpio::{pin::mode::OutputMode, pin::Pin};
+use crate::gpio::{pin::Pin, pin::mode::OutputMode};
 use crate::pac::{
+    CMU, CRYOTIMER, WDOG0,
     cmu::vals::{Dbg, Hf, Hfclklepresc, HfperprescPresc, HfprescPresc, Lfa, Lfb, Lfe, Selected},
     cryotimer::vals::Oscsel,
     msc,
     wdog::vals::Clksel,
-    CMU, CRYOTIMER, WDOG0,
 };
 use cortex_m::asm::nop;
 

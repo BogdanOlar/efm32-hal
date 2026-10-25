@@ -10,8 +10,8 @@ use crate::{
     gpio::{
         dynamic::DynamicPin,
         pin::{
-            mode::{InputMode, OutputMode},
             Pin, PinId, PinInfo,
+            mode::{InputMode, OutputMode},
         },
         port::PortId,
     },

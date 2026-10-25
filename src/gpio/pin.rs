@@ -2,14 +2,14 @@
 //!
 
 use crate::{
+    Sealed,
     gpio::{
+        GpioError,
         dynamic::{DynamicPin, PinMode},
         erased::ErasedPin,
         pin::mode::{InputMode, MultiMode, OutputMode},
         port::{self, PortId},
-        GpioError,
     },
-    Sealed,
 };
 use core::{fmt, marker::PhantomData};
 use embedded_hal::digital::{ErrorType, InputPin, OutputPin, StatefulOutputPin};
@@ -283,11 +283,11 @@ impl<MODE> Sealed for Pin<'F', 7, MODE> {}
 
 /// Pin mode types (type state)
 pub(crate) mod mode {
+    use crate::Sealed;
     use crate::gpio::dynamic::PinMode;
-    use crate::gpio::pin::{pins, PinId};
+    use crate::gpio::pin::{PinId, pins};
     use crate::gpio::port::PortId;
     use crate::pac::gpio::vals::PaModelMode0;
-    use crate::Sealed;
     use core::marker::PhantomData;
 
     /// Disabled mode (type state)
@@ -833,7 +833,7 @@ pub(crate) mod pins {
 
     use crate::gpio::{
         pin::PinId,
-        port::{ports, PortId},
+        port::{PortId, ports},
     };
 
     /// Set the Mode for a given pin `N` in port `P`

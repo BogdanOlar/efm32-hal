@@ -50,15 +50,15 @@ pub mod prelude {
     pub use crate::{
         cmu::{Cmu, HfClockPrescaler, HfClockSource, LfClockSource},
         gpio::{
+            Gpio, GpioError,
             pin::mode::{
                 Analog, Disabled, DisabledPu, InFilt, InFloat, InPd, InPdFilt, InPu, InPuFilt,
                 OutOd, OutOdAlt, OutOdFilt, OutOdFiltAlt, OutOdPu, OutOdPuAlt, OutOdPuFilt,
                 OutOdPuFiltAlt, OutOs, OutOsPd, OutPp, OutPpAlt,
             },
             port::{DataInCtrl, DriveStrength},
-            Gpio, GpioError,
         },
-        usart::spi::{dma::Spi, BitOrder, Config, SpiError, SpiParts},
+        usart::spi::{BitOrder, Config, SpiError, SpiParts, dma::Spi},
     };
     pub use efm32_pac as pac;
     pub use embedded_hal::{

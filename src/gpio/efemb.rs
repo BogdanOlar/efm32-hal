@@ -4,10 +4,10 @@
 use core::{fmt::Debug, future::Future, task::Poll};
 
 use crate::gpio::{
-    dynamic::DynamicPin,
-    exti::{self, ExtiCtrl, ExtiEdge, ExtiGroup, ExtiId, EXTI_COUNT},
-    pin::{mode::MultiMode, PinInfo},
     GpioError, Pin,
+    dynamic::DynamicPin,
+    exti::{self, EXTI_COUNT, ExtiCtrl, ExtiEdge, ExtiGroup, ExtiId},
+    pin::{PinInfo, mode::MultiMode},
 };
 use embassy_sync::waitqueue::AtomicWaker;
 use embedded_hal::digital::{ErrorType, InputPin};

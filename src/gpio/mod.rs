@@ -107,12 +107,12 @@ use crate::gpio::{
 };
 pub use crate::gpio::{
     pin::{
+        Pin,
         mode::{
             Analog, Disabled, DisabledPu, InFilt, InFloat, InPd, InPdFilt, InPu, InPuFilt, OutOd,
             OutOdAlt, OutOdFilt, OutOdFiltAlt, OutOdPu, OutOdPuAlt, OutOdPuFilt, OutOdPuFiltAlt,
             OutOs, OutOsPd, OutPp, OutPpAlt,
         },
-        Pin,
     },
     port::Port,
 };

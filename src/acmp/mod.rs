@@ -5,9 +5,10 @@ pub mod efemb;
 pub mod irq;
 
 use crate::{
+    Sealed, SingleCycleRMW,
     acmp::irq::default_handler,
     pac::acmp::vals::{Csressel, HysteresisHyst, Vasel},
-    peripherals, Sealed, SingleCycleRMW,
+    peripherals,
 };
 use cortex_m::peripheral::NVIC;
 use embassy_hal_internal::Peri;

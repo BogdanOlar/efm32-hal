@@ -2,16 +2,15 @@
 
 use crate::{
     dma::{
-        self,
+        self, ChReqSel, DmaChannel, DmaResult,
         descriptor::{Descriptor, TransferDescriptor, UnitSize},
         list::{DescList, FinMode, TargetAddr},
         transfer::{ChannelTransfer, TransferParams},
-        ChReqSel, DmaChannel, DmaResult,
     },
     gpio::dynamic::DynamicPin,
     usart::{
-        spi::{Config, SpiError, SpiLowLevel, SpiParts, TX_FILLER_BYTE},
         UsartId, UsartInstance,
+        spi::{Config, SpiError, SpiLowLevel, SpiParts, TX_FILLER_BYTE},
     },
 };
 #[cfg(feature = "debug-spi-dma-defmt-info")]

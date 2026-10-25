@@ -2,12 +2,12 @@
 //!
 
 use crate::{
-    gpio::{
-        pin::{self, mode::MultiMode, pins, PinId, PinInfo},
-        port::{self, PortId},
-        GpioError,
-    },
     Sealed,
+    gpio::{
+        GpioError,
+        pin::{self, PinId, PinInfo, mode::MultiMode, pins},
+        port::{self, PortId},
+    },
 };
 use core::fmt;
 use embedded_hal::digital::{ErrorType, InputPin, OutputPin, StatefulOutputPin};

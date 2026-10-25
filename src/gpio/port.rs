@@ -12,7 +12,7 @@
 
 #[cfg(feature = "use_debug_pins")]
 use crate::gpio::debug::debug_pins_enabled;
-use crate::{gpio::GpioError, Sealed};
+use crate::{Sealed, gpio::GpioError};
 
 /// Generic port type
 ///

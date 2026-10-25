@@ -26,9 +26,7 @@ pub(crate) fn set_algo_16(algo: &Algorithm<u16>) {
         w.set_bitreverse(!algo.refin);
         w.set_polysel(true)
     });
-    crc()
-        .poly()
-        .write(|w| w.set_poly(algo.poly.reverse_bits()));
+    crc().poly().write(|w| w.set_poly(algo.poly.reverse_bits()));
     crc().init().write_value(algo.init.reverse_bits() as u32);
 }
 
@@ -45,9 +43,7 @@ pub(crate) fn auto_init_set() {
 }
 
 pub(crate) fn input_u8(b: u8) {
-    crc()
-        .inputdatabyte()
-        .write(|w| w.set_inputdatabyte(b));
+    crc().inputdatabyte().write(|w| w.set_inputdatabyte(b));
 }
 
 pub(crate) fn data_u16(rev_bits: bool) -> u16 {

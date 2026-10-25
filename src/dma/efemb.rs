@@ -2,10 +2,10 @@
 //!
 
 use crate::dma::{
+    CHANNEL_COUNT, DmaChannel, DmaResult,
     descriptor::TransferDescriptor,
     irq,
     transfer::{ChannelTransfer, TransferParams},
-    DmaChannel, DmaResult, CHANNEL_COUNT,
 };
 #[cfg(feature = "debug-spi-dma-defmt-info")]
 use defmt::info;

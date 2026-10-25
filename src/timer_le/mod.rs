@@ -11,12 +11,13 @@
 pub mod efemb;
 
 use crate::{
+    Sealed,
     gpio::pin::Pin,
     pac::{
-        letimer::vals::{Out0loc, Ufoa0},
         CMU,
+        letimer::vals::{Out0loc, Ufoa0},
     },
-    peripherals, Sealed,
+    peripherals,
 };
 use core::marker::PhantomData;
 use cortex_m::asm::nop;
@@ -117,18 +118,8 @@ pub enum ChannelId {
     Ch1,
 }
 
-impl ChannelId {
-    pub(crate) const fn from_u8_unchecked(id: u8) -> Self {
-        match id & 0b1 {
-            0 => ChannelId::Ch0,
-            1 => ChannelId::Ch1,
-            _ => unreachable!(),
-        }
-    }
-}
-
 mod mmio {
-    use crate::pac::{letimer::LeTimer as Timer, LETIMER0};
+    use crate::pac::{LETIMER0, letimer::LeTimer as Timer};
     use cortex_m::asm::nop;
 
     /// Reset the timer peripheral

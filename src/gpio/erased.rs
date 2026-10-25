@@ -21,15 +21,16 @@
 use embedded_hal::digital::{ErrorType, InputPin, OutputPin, StatefulOutputPin};
 
 use crate::{
+    Sealed,
     gpio::{
+        GpioError,
         pin::{
+            PinId, PinInfo,
             mode::{self, InputMode, MultiMode, OutputMode},
-            pins, PinId, PinInfo,
+            pins,
         },
         port::{self, PortId},
-        GpioError,
     },
-    Sealed,
 };
 use core::{fmt, marker::PhantomData};
 

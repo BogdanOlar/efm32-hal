@@ -10,11 +10,11 @@ pub use crate::pac::timer::vals::{
     Presc,
 };
 use crate::{
+    Sealed, SingleCycleRMW,
     cmu::Clocks,
     gpio::pin::Pin,
     peripherals, prs,
-    timer::irq::{default_handler, TIMER_HANDLER},
-    Sealed, SingleCycleRMW,
+    timer::irq::{TIMER_HANDLER, default_handler},
 };
 use core::{convert::Infallible, marker::PhantomData};
 use cortex_m::peripheral::NVIC;

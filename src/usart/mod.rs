@@ -4,7 +4,7 @@
 
 pub mod spi;
 
-use crate::{peripherals, Sealed};
+use crate::{Sealed, peripherals};
 use embassy_hal_internal::PeripheralType;
 
 /// Identifies which USART peripheral a driver instance is bound to.

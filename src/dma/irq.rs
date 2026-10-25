@@ -1,7 +1,7 @@
 //! DMA interrupt handling
 
 use crate::{
-    dma::{mmio, ChannelId, DmaError, DmaResult, CHANNEL_COUNT},
+    dma::{CHANNEL_COUNT, ChannelId, DmaError, DmaResult, mmio},
     pac::interrupt,
 };
 use core::cell::RefCell;

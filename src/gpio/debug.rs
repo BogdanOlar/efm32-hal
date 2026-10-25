@@ -20,9 +20,9 @@
 //! ```
 
 use crate::gpio::{
-    pin::Pin,
-    port::{ports, DataInCtrl, PortId},
     Disabled, GpioError,
+    pin::Pin,
+    port::{DataInCtrl, PortId, ports},
 };
 use core::fmt;
 

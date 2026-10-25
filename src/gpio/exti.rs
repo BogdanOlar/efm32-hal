@@ -72,9 +72,9 @@
 
 use crate::{
     gpio::{
-        dynamic::DynamicPin,
-        pin::{mode::EnabledMode, PinInfo},
         GpioError, Pin,
+        dynamic::DynamicPin,
+        pin::{PinInfo, mode::EnabledMode},
     },
     pac::interrupt,
 };
@@ -424,12 +424,10 @@ pub enum ExtiEdge {
 
 /// Access functions for external interrupts Memory Mapped IO
 pub mod mmio {
-    use crate::{
-        gpio::{
-            exti::{ExtiEdge, ExtiId},
-            pin::PinId,
-            port::PortId,
-        },
+    use crate::gpio::{
+        exti::{ExtiEdge, ExtiId},
+        pin::PinId,
+        port::PortId,
     };
 
     const SEL_GROUP_SIZE: u8 = 4;
@@ -469,14 +467,8 @@ pub mod mmio {
         let pin_mask = SEL_PIN_BIT_MASK << offset;
 
         let (port_reg_val, pin_reg_val) = match exti_is_low_reg(exti) {
-            true => (
-                gpio.extipsell().read().0,
-                gpio.extipinsell().read().0,
-            ),
-            false => (
-                gpio.extipselh().read().0,
-                gpio.extipinselh().read().0,
-            ),
+            true => (gpio.extipsell().read().0, gpio.extipinsell().read().0),
+            false => (gpio.extipselh().read().0, gpio.extipinselh().read().0),
         };
         let port = ((port_reg_val & port_mask) >> offset) as u8;
         let pin = ((pin_reg_val & pin_mask) >> offset) as u8 + pin_base_id;
@@ -533,9 +525,7 @@ pub mod mmio {
 
     /// Clear external interrupt flag
     pub fn exti_clear(exti: ExtiId) {
-        gpio()
-            .ifc()
-            .write(|w| w.set_ext(1u16 << exti as u8));
+        gpio().ifc().write(|w| w.set_ext(1u16 << exti as u8));
     }
 
     /// Select the edge which triggers the external interrupt
@@ -602,9 +592,7 @@ pub mod mmio {
 
     /// Enable energy mode 4 wake up for the given external interrupt
     pub fn exti_enable_em4wu(exti: ExtiId) {
-        gpio()
-            .ien()
-            .modify(|w| w.set_em4wu(1u16 << exti as u8));
+        gpio().ien().modify(|w| w.set_em4wu(1u16 << exti as u8));
     }
 
     /// Check if given Pin can be bound to given Exti
