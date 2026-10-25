@@ -100,23 +100,23 @@ impl<'a> DescList<'a> {
         T: Into<ListDescriptor> + Copy,
     {
         // Modify the previous descriptor (if it exists) to link to the current descriptor in the list
-        if let Some(prev_list_desc) = self.prev.take() {
-            if let Some(prev_desc) = self.descriptors.get_mut(self.index - 1) {
-                *prev_desc = match prev_list_desc {
-                    ListDescriptor::Transfer(transfer_desc) => transfer_desc
-                        .with_link(Addr::Relative(1), true)
-                        .into_inner(),
-                    ListDescriptor::LoopTransfer(loop_transfer_desc) => {
-                        loop_transfer_desc.with_link(true).into_inner()
-                    }
-                    ListDescriptor::Sync(sync_desc) => {
-                        sync_desc.with_link(Addr::Relative(1), true).into_inner()
-                    }
-                    ListDescriptor::Immediate(immediate_desc) => immediate_desc
-                        .with_link(Addr::Relative(1), true)
-                        .into_inner(),
-                };
-            }
+        if let Some(prev_list_desc) = self.prev.take()
+            && let Some(prev_desc) = self.descriptors.get_mut(self.index - 1)
+        {
+            *prev_desc = match prev_list_desc {
+                ListDescriptor::Transfer(transfer_desc) => transfer_desc
+                    .with_link(Addr::Relative(1), true)
+                    .into_inner(),
+                ListDescriptor::LoopTransfer(loop_transfer_desc) => {
+                    loop_transfer_desc.with_link(true).into_inner()
+                }
+                ListDescriptor::Sync(sync_desc) => {
+                    sync_desc.with_link(Addr::Relative(1), true).into_inner()
+                }
+                ListDescriptor::Immediate(immediate_desc) => immediate_desc
+                    .with_link(Addr::Relative(1), true)
+                    .into_inner(),
+            };
         }
 
         self.push(desc_bld)
