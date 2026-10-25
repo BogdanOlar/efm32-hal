@@ -983,6 +983,7 @@ const fn rx_loc(port: PortId, pin: PinId) -> Option<u8> {
 
 /// Resolve the `ROUTELOC0` value for a CS pin at runtime, or `None` if the pin is not a valid
 /// SPI CS pin. Mirrors the `impl_cs_loc!` macro table.
+#[allow(dead_code)]
 const fn cs_loc(port: PortId, pin: PinId) -> Option<u8> {
     let pin = pin as u8;
     match port {
