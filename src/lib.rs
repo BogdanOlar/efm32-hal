@@ -32,8 +32,32 @@ pub(crate) use sealed::Sealed;
 
 // Generate the HAL peripheral singletons. Corresponding drivers can use these to create driver instances.
 embassy_hal_internal::peripherals!(
-    Acmp0, Adc, Idac, Gpio, I2c, Usart0, Usart1, Timer0, Timer1, Gpcrc, Cryotimer, Rtcc, LeTimer0,
-    LeUart0, Pcnt, Wdog0, Msc, Fpueh, Ldma, Emu, Cmu, Rmu, Prs, Crypto,
+    Acmp0,
+    Adc,
+    Idac,
+    Gpio,
+    I2c,
+    Usart0,
+    Usart1,
+    Timer0,
+    Timer1,
+    Gpcrc,
+    Cryotimer,
+    Rtcc,
+    // Only expose the LeTimer0 HAL peripheral if it is **not** used as the embassy ticker
+    #[cfg(not(feature = "_timdrv-letim0"))]
+    LeTimer0,
+    LeUart0,
+    Pcnt,
+    Wdog0,
+    Msc,
+    Fpueh,
+    Ldma,
+    Emu,
+    Cmu,
+    Rmu,
+    Prs,
+    Crypto,
 );
 
 pub use embassy_hal_internal::{Peri, PeripheralType};
@@ -42,7 +66,26 @@ pub use embassy_hal_internal::{Peri, PeripheralType};
 ///
 /// This may be called only once; a second call panics.
 pub fn init() -> Peripherals {
-    Peripherals::take()
+    // Return the HAL peripherals
+    let peripherals = Peripherals::take();
+
+    // FIXME: configure the clocks according to the caller's given config
+    let _clocks = crate::cmu::Cmu::new(unsafe { peripherals.Cmu.clone_unchecked() })
+        .with_hf_clk(
+            crate::cmu::HfClockSource::HfXO(40_000_000),
+            crate::cmu::HfClockPrescaler::Div1,
+        )
+        .with_lfa_clk(crate::cmu::LfClockSource::LfRco)
+        .freeze();
+
+    // If embassy feature is enabled, initialize the timer driver for it
+    #[cfg(feature = "efemb")]
+    {
+        #[cfg(feature = "efemb-timdrv-letim0-hz-32_768")]
+        timer_le::efemb::time_driver::Ticker::<0>::init();
+    }
+
+    peripherals
 }
 
 /// Convenience module which exports the most used types for each module

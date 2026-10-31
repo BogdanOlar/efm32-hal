@@ -73,11 +73,16 @@ efemb = [
     "dep:embassy-time-driver",
     "dep:embedded-hal-async",
 ]
-# Embassy time driver
-## Use LeTimer0 as embassy timer base, with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
-efemb-timdrv-letim0-hz-32_768 = ["embassy-time-driver/tick-hz-32_768"]
-## Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
-efemb-timdrv-letim0-hz-1_000 = ["embassy-time-driver/tick-hz-1_000"]
+
+## Embassy time driver
+
+### LeTimer0 as embassy timer base (private feature, use the ones below this one)
+_timdrv-letim0 = ["efemb"]
+#### Use LeTimer0 as embassy timer base with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+efemb-timdrv-letim0-hz-32_768 = ["_timdrv-letim0", "embassy-time-driver/tick-hz-32_768"]
+#### Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+efemb-timdrv-letim0-hz-1_000 = ["_timdrv-letim0", "embassy-time-driver/tick-hz-1_000"]
+
 # Debug option for DMA to set max transfer size to `1<<5` instead of `1<<12`
 dma-debug-max-transfer = []
 ## Compatibility with the [`crc`](https://github.com/mrhooray/crc-rs) crate, for supported (16 and 32 bit) CRC algorithms

@@ -1,13 +1,7 @@
 //! Low Energy Timer
 //!
 
-#[cfg(all(
-    feature = "efemb",
-    any(
-        feature = "efemb-timdrv-letim0-hz-32_768",
-        feature = "efemb-timdrv-letim0-hz-1_000"
-    )
-))]
+#[cfg(feature = "efemb")]
 pub mod efemb;
 
 use crate::{
@@ -38,7 +32,12 @@ pub trait LeTimerInstance: Sealed + embassy_hal_internal::PeripheralType + 'stat
     fn id(&self) -> LeTimerId;
 }
 
+// Only expose the LeTimer0 HAL peripheral if it is **not** used as the embassy ticker
+#[cfg(not(feature = "_timdrv-letim0"))]
 impl Sealed for peripherals::LeTimer0 {}
+
+// Only expose the LeTimer0 HAL peripheral if it is **not** used as the embassy ticker
+#[cfg(not(feature = "_timdrv-letim0"))]
 impl LeTimerInstance for peripherals::LeTimer0 {
     fn regs(&self) -> crate::pac::letimer::LeTimer {
         crate::pac::LETIMER0
@@ -118,180 +117,64 @@ pub enum ChannelId {
     Ch1,
 }
 
-mod mmio {
-    use crate::pac::{LETIMER0, letimer::LeTimer as Timer};
-    use cortex_m::asm::nop;
+/// Low Energy Timer Interrupt Flags
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
+pub enum Interrupt {
+    /// Comparator 0 interrupt flag
+    #[default]
+    Comp0,
+    /// Comparator 1 interrupt flag
+    Comp1,
+    /// Underflow interrupt flag
+    Underflow,
+    /// Repeat 0 interrupt flag
+    Rep0,
+    /// Repeat 1 interrupt flag
+    Rep1,
+}
 
-    /// Reset the timer peripheral
+/// Interrupt flags bitfield
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(transparent)]
+pub struct Interrupts(u32);
+
+impl Interrupts {
+    /// All interrupt flags
+    pub const ALL: Self = Self::new(Interrupt::Comp0)
+        .with_flag(Interrupt::Comp1)
+        .with_flag(Interrupt::Underflow)
+        .with_flag(Interrupt::Rep0)
+        .with_flag(Interrupt::Rep1);
+
+    /// Create interrupts bitfield starting from given flag
+    pub const fn new(flag: Interrupt) -> Self {
+        Self(1u32 << flag as u8)
+    }
+
+    /// Bitfield builder with given interrupt flag
+    pub const fn with_flag(self, flag: Interrupt) -> Self {
+        Self(self.0 | (1u32 << flag as u8))
+    }
+
+    /// Get state of given flag
+    pub const fn is_set(&self, flag: Interrupt) -> bool {
+        (self.0 & (1u32 << flag as u8)) != 0
+    }
+
+    /// Create a new bitfield from unchecked `u32` raw bitfield.
     ///
-    /// NOTE: this assumes that the peripheral is stopped and ready to be configured
-    pub(crate) fn reset() {
-        let p = timer_le();
-        p.ctrl().write_value(Default::default());
-        p.ien().write_value(Default::default());
-        p.ifc().write(|w| {
-            w.set_comp0(true);
-            w.set_comp1(true);
-            w.set_uf(true);
-            w.set_rep0(true);
-            w.set_rep1(true);
-        });
+    /// This is meant to be used to convert the values of the IF* registers into [`Interrupts`]
+    fn new_unchecked(raw_flags: u32) -> Self {
+        Self(raw_flags)
     }
+}
 
-    /// Is the timer currently running
-    pub(crate) fn running() -> bool {
-        timer_le().status().read().running()
-    }
-
-    /// Low Energy Timer Interrupt Flags
-    #[repr(C)]
-    pub enum InterruptFlag {
-        /// Comparator 0 interrupt flag
-        Comp0,
-        /// Comparator 1 interrupt flag
-        Comp1,
-        /// Underflow interrupt flag
-        Underflow,
-        /// Repeat 0 interrupt flag
-        Rep0,
-        /// Repeat 1 interrupt flag
-        Rep1,
-    }
-
-    /// Get the (logical) counter value.
-    ///
-    /// NOTE: This is a count _down_ timer, so actual register value is `u16::MAX - cnt`
-    #[inline(always)]
-    pub(crate) fn counter_get() -> u16 {
-        u16::MAX - timer_le().cnt().read().cnt()
-    }
-
-    /// Set the (logical) counter value.
-    ///
-    /// NOTE: This is a count _down_ timer, so actual register value will be set to `u16::MAX - cnt`
-    pub(crate) fn counter_set(cnt: u16) {
-        timer_le().cnt().write(|w| w.set_cnt(u16::MAX - cnt));
-    }
-
-    /// Set the (logical) comparator 0 value
-    pub(crate) fn comp0_set(cnt: u16) {
-        timer_le().comp0().write(|w| w.set_comp0(u16::MAX - cnt));
-    }
-
-    /// Set the (logical) comparator 0 value
-    pub(crate) fn comp1_set(cnt: u16) {
-        timer_le().comp1().write(|w| w.set_comp1(u16::MAX - cnt));
-    }
-
-    /// Get the state of the given interrupt flag
-    pub(crate) fn if_get(flag: InterruptFlag) -> bool {
-        let r = timer_le().if_().read();
-        match flag {
-            InterruptFlag::Comp0 => r.comp0(),
-            InterruptFlag::Comp1 => r.comp1(),
-            InterruptFlag::Underflow => r.uf(),
-            InterruptFlag::Rep0 => r.rep0(),
-            InterruptFlag::Rep1 => r.rep1(),
-        }
-    }
-
-    /// Set the given interrupt flag
-    pub(crate) fn if_set(flag: InterruptFlag) {
-        timer_le().ifs().write(|w| match flag {
-            InterruptFlag::Comp0 => w.set_comp0(true),
-            InterruptFlag::Comp1 => w.set_comp1(true),
-            InterruptFlag::Underflow => w.set_uf(true),
-            InterruptFlag::Rep0 => w.set_rep0(true),
-            InterruptFlag::Rep1 => w.set_rep1(true),
-        });
-    }
-
-    /// Clear the given interrupt flag
-    pub(crate) fn if_clear(flag: InterruptFlag) {
-        timer_le().ifc().write(|w| match flag {
-            InterruptFlag::Comp0 => w.set_comp0(true),
-            InterruptFlag::Comp1 => w.set_comp1(true),
-            InterruptFlag::Underflow => w.set_uf(true),
-            InterruptFlag::Rep0 => w.set_rep0(true),
-            InterruptFlag::Rep1 => w.set_rep1(true),
-        });
-    }
-
-    /// Enable the given interrupt flag
-    pub(crate) fn ienable(flag: InterruptFlag) {
-        timer_le().ien().modify(|w| match flag {
-            InterruptFlag::Comp0 => w.set_comp0(true),
-            InterruptFlag::Comp1 => w.set_comp1(true),
-            InterruptFlag::Underflow => w.set_uf(true),
-            InterruptFlag::Rep0 => w.set_rep0(true),
-            InterruptFlag::Rep1 => w.set_rep1(true),
-        });
-    }
-
-    pub(crate) fn idisable(flag: InterruptFlag) {
-        timer_le().ien().modify(|w| match flag {
-            InterruptFlag::Comp0 => w.set_comp0(false),
-            InterruptFlag::Comp1 => w.set_comp1(false),
-            InterruptFlag::Underflow => w.set_uf(false),
-            InterruptFlag::Rep0 => w.set_rep0(false),
-            InterruptFlag::Rep1 => w.set_rep1(false),
-        });
-    }
-
-    /// Timer commands
-    #[repr(C)]
-    pub enum Command {
-        /// Start the timer
-        Start,
-        /// Stop the timer
-        Stop,
-        /// Clear the timer counter register to `0`
-        Clear,
-        /// Drive toggle output 0 to its idle value
-        ClearToggleOutput0,
-        /// Drive toggle output 1 to its idle value
-        ClearToggleOutput1,
-    }
-
-    /// Execute a timer command and wait until the command is applied
-    pub(crate) fn cmd(command: Command) {
-        cmds(&[command]);
-    }
-
-    /// Execute multiple timer command and wait until the commands are applied
-    pub(crate) fn cmds(commands: &[Command]) {
-        let p = timer_le();
-        p.cmd().write(|w| {
-            for cmd in commands {
-                match cmd {
-                    Command::Start => {
-                        w.set_start(true);
-                    }
-                    Command::Stop => {
-                        w.set_stop(true);
-                    }
-                    Command::Clear => {
-                        w.set_clear(true);
-                    }
-                    Command::ClearToggleOutput0 => {
-                        w.set_cto0(true);
-                    }
-                    Command::ClearToggleOutput1 => {
-                        w.set_cto1(true);
-                    }
-                }
-            }
-        });
-
-        // Block until the timer commands have been applied
-        while p.syncbusy().read().cmd() {
-            nop();
-        }
-    }
-
-    /// Get a reference to the Low Energy Timer register block
-    pub(crate) const fn timer_le() -> Timer {
-        LETIMER0
+impl From<Interrupts> for u32 {
+    fn from(value: Interrupts) -> Self {
+        value.0
     }
 }
 
