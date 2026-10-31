@@ -3,33 +3,49 @@
 
 #[cfg(feature = "efemb")]
 pub mod efemb;
+pub mod irq;
 
+pub use crate::pac::letimer::vals::Repmode;
 use crate::{
-    Sealed,
+    Sealed, SingleCycleRMW,
     gpio::pin::Pin,
     pac::{
         CMU,
-        letimer::vals::{Out0loc, Ufoa0},
+        letimer::{
+            regs::Ifs,
+            vals::{Out0loc, Ufoa0},
+        },
     },
     peripherals,
+    timer_le::irq::{LETIMER_HANDLER, default_handler},
 };
 use core::marker::PhantomData;
-use cortex_m::asm::nop;
+use cortex_m::{asm::nop, peripheral::NVIC};
 use embassy_hal_internal::Peri;
 use embedded_hal::digital::OutputPin;
 
 /// LeTimer peripheral ID
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
 pub enum LeTimerId {
     /// Low Energy Timer 0
     LeTimer0,
 }
 
-/// A timer peripheral instance usable by the HAL timer driver.
+impl LeTimerId {
+    /// Number of LeTimer peripherals
+    pub const COUNT: usize = 1;
+}
+
+/// A low-energy timer peripheral instance usable by the HAL timer driver.
 pub trait LeTimerInstance: Sealed + embassy_hal_internal::PeripheralType + 'static {
     /// Returns the chiptool PAC register-block handle for this timer instance.
     fn regs(&self) -> crate::pac::letimer::LeTimer;
     /// Timer peripheral ID
     fn id(&self) -> LeTimerId;
+    /// Peripheral Interrupt
+    fn interrupt(&self) -> crate::pac::Interrupt;
 }
 
 // Only expose the LeTimer0 HAL peripheral if it is **not** used as the embassy ticker
@@ -46,7 +62,14 @@ impl LeTimerInstance for peripherals::LeTimer0 {
     fn id(&self) -> LeTimerId {
         LeTimerId::LeTimer0
     }
+
+    fn interrupt(&self) -> crate::pac::Interrupt {
+        crate::pac::Interrupt::LETIMER0
+    }
 }
+
+/// Handler function for a LETIMER interrupt
+pub type LeTimerIrqHandler = fn(flags: Interrupts, regs: crate::pac::letimer::LeTimer);
 
 /// Low Energy timer
 /// Timer
@@ -58,8 +81,16 @@ pub struct LeTimer<'d, T: LeTimerInstance> {
 
 impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
     /// Instantiate a LeTimer driver
-    pub fn new(peri: Peri<'d, T>) -> Self {
-        let instance = Self { peri };
+    ///
+    /// The LFACLK must be enabled before calling this.
+    ///
+    /// **NOTE**: This will enable the NVIC interrupt
+    pub fn new(peri: Peri<'d, T>, config: &Config) -> Self {
+        let mut instance = Self { peri };
+        let p = instance.peri.regs();
+
+        NVIC::mask(instance.peri.interrupt());
+
         // Enable LE Timer
         CMU.lfaclken0()
             .modify(|w| w.set_letimer(instance.peri.id() as usize, true));
@@ -69,7 +100,199 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
             nop()
         }
 
+        instance.stop();
+        instance.disable_interrupts(Interrupts::ALL);
+        instance.clear_interrupts(Interrupts::ALL);
+
+        p.ctrl().write(|w| {
+            w.set_repmode(config.repeat_mode);
+            w.set_comp0top(config.comp0_top);
+            w.set_buftop(config.buffered_top);
+            w.set_debugrun(config.debug_run);
+        });
+        p.cnt().write(|w| w.set_cnt(config.count));
+        p.comp0().write(|w| w.set_comp0(config.comp0));
+        p.comp1().write(|w| w.set_comp1(config.comp1));
+        p.rep0().write(|w| w.set_rep0(config.rep0));
+        p.rep1().write(|w| w.set_rep1(config.rep1));
+
+        // Handle interrupt configs
+        match config.interrupts.handler {
+            Some(handler) => instance.set_irq_handler(handler),
+            None => instance.clear_irq_handler(),
+        }
+        instance.enable_interrupts(config.interrupts.flags);
+        unsafe {
+            NVIC::unmask(instance.peri.interrupt());
+        };
+
         instance
+    }
+
+    /// Start Timer
+    pub fn start(&mut self) {
+        self.command(|w| w.set_start(true));
+    }
+
+    /// Stop Timer
+    pub fn stop(&mut self) {
+        self.command(|w| w.set_stop(true));
+    }
+
+    /// Clear Timer counter (`CNT`)
+    pub fn clear(&mut self) {
+        self.command(|w| w.set_clear(true));
+    }
+
+    /// Check if the Timer is running
+    pub fn is_running(&self) -> bool {
+        self.peri.regs().status().read().running()
+    }
+
+    /// Get Timer count value
+    pub fn count(&self) -> u16 {
+        self.peri.regs().cnt().read().cnt()
+    }
+
+    /// Set Timer count value
+    pub fn set_count(&mut self, count: u16) {
+        self.peri.regs().cnt().write(|w| w.set_cnt(count));
+    }
+
+    /// Get compare value (`COMPn`) of the given channel
+    pub fn compare(&self, channel: ChannelId) -> u16 {
+        let p = self.peri.regs();
+        match channel {
+            ChannelId::Ch0 => p.comp0().read().comp0(),
+            ChannelId::Ch1 => p.comp1().read().comp1(),
+        }
+    }
+
+    /// Set compare value (`COMPn`) of the given channel
+    pub fn set_compare(&mut self, channel: ChannelId, value: u16) {
+        let p = self.peri.regs();
+        match channel {
+            ChannelId::Ch0 => p.comp0().write(|w| w.set_comp0(value)),
+            ChannelId::Ch1 => p.comp1().write(|w| w.set_comp1(value)),
+        }
+    }
+
+    /// Get repeat counter value (`REPn`) of the given channel
+    pub fn repeat(&self, channel: ChannelId) -> u8 {
+        let p = self.peri.regs();
+        match channel {
+            ChannelId::Ch0 => p.rep0().read().rep0(),
+            ChannelId::Ch1 => p.rep1().read().rep1(),
+        }
+    }
+
+    /// Set repeat counter value (`REPn`) of the given channel
+    pub fn set_repeat(&mut self, channel: ChannelId, value: u8) {
+        let p = self.peri.regs();
+        match channel {
+            ChannelId::Ch0 => p.rep0().write(|w| w.set_rep0(value)),
+            ChannelId::Ch1 => p.rep1().write(|w| w.set_rep1(value)),
+        }
+    }
+
+    /// Wait for timer flag by polling the peripheral interrupt flag
+    ///
+    /// Timer must be running before calling this function, and the `flag` interrupt must **not** be enabled, otherwise
+    /// the interrupt handler will clear the flag before it can be observed here.
+    pub fn poll_for_interrupt(&mut self, flag: Interrupt) {
+        self.clear_interrupt(flag);
+        while !self.get_interrupt(flag) {
+            nop();
+        }
+        self.clear_interrupt(flag);
+    }
+
+    /// Enable single interrupt
+    pub fn enable_interrupt(&mut self, flag: Interrupt) {
+        self.enable_interrupts(Interrupts::new(flag));
+    }
+
+    /// Disable single interrupt
+    pub fn disable_interrupt(&mut self, flag: Interrupt) {
+        self.disable_interrupts(Interrupts::new(flag));
+    }
+
+    /// Get single interrupt flag
+    pub fn get_interrupt(&self, flag: Interrupt) -> bool {
+        self.get_interrupts().is_set(flag)
+    }
+
+    /// Set single interrupt flag
+    pub fn set_interrupt(&mut self, flag: Interrupt) {
+        self.set_interrupts(Interrupts::new(flag));
+    }
+
+    /// Clear single interrupt flag
+    pub fn clear_interrupt(&mut self, flag: Interrupt) {
+        self.clear_interrupts(Interrupts::new(flag));
+    }
+
+    /// Enable multiple interrupts
+    pub fn enable_interrupts(&mut self, flags: Interrupts) {
+        self.peri.regs().ien().sc_set(flags.0);
+    }
+
+    /// Disable multiple interrupts
+    pub fn disable_interrupts(&mut self, flags: Interrupts) {
+        self.peri.regs().ien().sc_clear(flags.0);
+    }
+
+    /// Get enabled interrupts
+    pub fn enabled_interrupts(&self) -> Interrupts {
+        Interrupts::new_unchecked(self.peri.regs().ien().read().0)
+    }
+
+    /// Get all interrupt flags
+    pub fn get_interrupts(&self) -> Interrupts {
+        Interrupts::new_unchecked(self.peri.regs().if_().read().0)
+    }
+
+    /// Set multiple interrupt flags
+    pub fn set_interrupts(&mut self, flags: Interrupts) {
+        self.peri.regs().ifs().write_value(Ifs(flags.0));
+    }
+
+    /// Clear multiple interrupt flags
+    pub fn clear_interrupts(&mut self, flags: Interrupts) {
+        self.peri.regs().ifc().write_value(Ifs(flags.0));
+    }
+
+    /// Async await for timer interrupt
+    ///
+    /// Only interrupts enabled with [`LeTimer::enable_interrupts`] (or [`InterruptConfig::flags`]) will be returned.
+    #[cfg(feature = "efemb")]
+    pub async fn interrupt(&self) -> Interrupts {
+        efemb::InterruptsFuture::new(unsafe { self.peri.clone_unchecked() }).await
+    }
+
+    pub(crate) fn set_irq_handler(&mut self, handler: LeTimerIrqHandler) {
+        critical_section::with(|cs| {
+            LETIMER_HANDLER[self.peri.id() as usize]
+                .borrow(cs)
+                .replace(handler)
+        });
+    }
+
+    pub(crate) fn clear_irq_handler(&mut self) {
+        critical_section::with(|cs| {
+            LETIMER_HANDLER[self.peri.id() as usize]
+                .borrow(cs)
+                .replace(default_handler)
+        });
+    }
+
+    /// Write `CMD` register, waiting for any previous command to be synchronized into the LF clock domain first
+    fn command(&mut self, f: impl FnOnce(&mut crate::pac::letimer::regs::Cmd)) {
+        let p = self.peri.regs();
+        while p.syncbusy().read().cmd() {
+            nop()
+        }
+        p.cmd().write(f);
     }
 
     /// Convert timer to PWM
@@ -103,6 +326,60 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
             _pwm_pin: PhantomData,
         }
     }
+}
+
+/// LeTimer driver config
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Config {
+    /// Repeat mode (`REPMODE`)
+    pub repeat_mode: Repmode,
+    /// `COMP0` is used as the top value (reload value for `CNT` on underflow) instead of `0xFFFF` (`COMP0TOP`)
+    pub comp0_top: bool,
+    /// Load `COMP1` into `COMP0` when `REP0` reaches zero (`BUFTOP`)
+    pub buffered_top: bool,
+    /// Keep the timer running while the core is halted by the debugger (`DEBUGRUN`)
+    pub debug_run: bool,
+    /// Initial counter value (`CNT`)
+    pub count: u16,
+    /// Compare value 0 (`COMP0`)
+    pub comp0: u16,
+    /// Compare value 1 (`COMP1`)
+    pub comp1: u16,
+    /// Repeat counter 0 (`REP0`)
+    pub rep0: u8,
+    /// Repeat counter 1 (`REP1`)
+    pub rep1: u8,
+    /// Enable interrupts, and provide an optional Interrupt Handler function
+    pub interrupts: InterruptConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        // match the register reset values
+        Self {
+            repeat_mode: Repmode::Free,
+            comp0_top: false,
+            buffered_top: false,
+            debug_run: false,
+            count: 0,
+            comp0: 0,
+            comp1: 0,
+            rep0: 0,
+            rep1: 0,
+            interrupts: Default::default(),
+        }
+    }
+}
+
+/// LeTimer peripheral interrupt configuration
+#[derive(Debug, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct InterruptConfig {
+    /// Enable interrupt flags
+    pub flags: Interrupts,
+    /// Optional timer interrupt request handler function
+    pub handler: Option<LeTimerIrqHandler>,
 }
 
 /// LeTimer Compare Channel ID

@@ -1,6 +1,51 @@
-//! Embassy time driver implementation for LeTimer
+//! Async LeTimer, and Embassy time driver implementation for LeTimer
 //!
 
+use crate::timer_le::{Interrupts, LeTimerId, LeTimerInstance};
+use core::sync::atomic::{AtomicU32, Ordering};
+use embassy_hal_internal::Peri;
+
+static LETIMER_WAKERS: [embassy_sync::waitqueue::AtomicWaker; LeTimerId::COUNT] =
+    [const { embassy_sync::waitqueue::AtomicWaker::new() }; _];
+static LETIMER_RAW_FLAGS: [AtomicU32; LeTimerId::COUNT] = [const { AtomicU32::new(0) }; _];
+
+pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
+    // Accumulate flags until the future consumes them, so none are lost if several IRQs fire before it is polled
+    LETIMER_RAW_FLAGS[PN as usize].fetch_or(flags.into(), Ordering::SeqCst);
+
+    LETIMER_WAKERS[PN as usize].wake();
+}
+
+pub(super) struct InterruptsFuture<'d, T: LeTimerInstance> {
+    peri: Peri<'d, T>,
+}
+
+impl<'d, T: LeTimerInstance> InterruptsFuture<'d, T> {
+    pub(super) fn new(peri: Peri<'d, T>) -> Self {
+        Self { peri }
+    }
+}
+
+impl<'d, T: LeTimerInstance> core::future::Future for InterruptsFuture<'d, T> {
+    type Output = Interrupts;
+
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        LETIMER_WAKERS[self.peri.id() as usize].register(cx.waker());
+
+        let raw_flags = LETIMER_RAW_FLAGS[self.peri.id() as usize].swap(0, Ordering::SeqCst);
+
+        if raw_flags != 0 {
+            core::task::Poll::Ready(Interrupts::new_unchecked(raw_flags))
+        } else {
+            core::task::Poll::Pending
+        }
+    }
+}
+
+/// Embassy time driver, when one of the LeTimer peripherals is used as the time driver
 #[cfg(feature = "_timdrv-letim")]
 pub(crate) mod time_driver {
     use crate::{
