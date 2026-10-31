@@ -99,6 +99,13 @@ impl LeTimerRegs {
         Self { regs, id }
     }
 
+    /// Interrupt of this LeTimer peripheral
+    pub(crate) const fn interrupt(&self) -> crate::pac::Interrupt {
+        match self.id {
+            LeTimerId::LeTimer0 => crate::pac::Interrupt::LETIMER0,
+        }
+    }
+
     /// Enable the peripheral clock (`LFACLK` must be enabled)
     pub(crate) fn enable_clock(&self) {
         CMU.lfaclken0()
@@ -113,6 +120,7 @@ impl LeTimerRegs {
     /// Stop the timer, and apply the given `config` (except for the interrupt handler)
     pub(crate) fn configure(&self, config: &Config) {
         self.stop();
+        self.wait_sync();
         self.disable_interrupts(Interrupts::ALL);
         self.clear_interrupts(Interrupts::ALL);
 
@@ -229,10 +237,15 @@ impl LeTimerRegs {
 
     /// Write `CMD` register, waiting for any previous command to be synchronized into the LF clock domain first
     fn command(&self, f: impl FnOnce(&mut crate::pac::letimer::regs::Cmd)) {
+        self.wait_sync();
+        self.regs.cmd().write(f);
+    }
+
+    /// Wait until the last command written to `CMD` has been synchronized into the LF clock domain
+    fn wait_sync(&self) {
         while self.regs.syncbusy().read().cmd() {
             nop()
         }
-        self.regs.cmd().write(f);
     }
 }
 
@@ -245,7 +258,7 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
     pub fn new(peri: Peri<'d, T>, config: &Config) -> Self {
         let mut instance = Self { peri };
 
-        NVIC::mask(instance.peri.interrupt());
+        NVIC::mask(instance.regs().interrupt());
 
         instance.regs().enable_clock();
         instance.regs().configure(config);
@@ -256,7 +269,7 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
             None => instance.clear_irq_handler(),
         }
         unsafe {
-            NVIC::unmask(instance.peri.interrupt());
+            NVIC::unmask(instance.regs().interrupt());
         };
 
         instance

@@ -9,6 +9,8 @@ static LETIMER_WAKERS: [embassy_sync::waitqueue::AtomicWaker; LeTimerId::COUNT] 
     [const { embassy_sync::waitqueue::AtomicWaker::new() }; _];
 static LETIMER_RAW_FLAGS: [AtomicU32; LeTimerId::COUNT] = [const { AtomicU32::new(0) }; _];
 
+/// Async handler for each LETIMER<PN>
+#[allow(dead_code)]
 pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
     // Accumulate flags until the future consumes them, so none are lost if several IRQs fire before it is polled
     LETIMER_RAW_FLAGS[PN as usize].fetch_or(flags.into(), Ordering::SeqCst);
@@ -45,28 +47,39 @@ impl<'d, T: LeTimerInstance> core::future::Future for InterruptsFuture<'d, T> {
     }
 }
 
-/// Embassy time driver, when one of the LeTimer peripherals is used as the time driver
 #[cfg(feature = "_timdrv-letim")]
 pub(crate) mod time_driver {
+    //! Embassy time driver, when one of the LeTimer peripherals is used as the time driver
+    //!
+    //! The 16 bit LeTimer counter is extended to 64 bits by counting half-periods: [`Ticker::period`] is incremented
+    //! both on timer underflow (tick count wraps `0xFFFF -> 0`) and when the tick count reaches `0x8000` (Comp1 match).
+    //! The parity of `period` tells which half of the counter range we _should_ be in, which lets [`Driver::now()`]
+    //! detect (and correct for) a wrap whose interrupt hasn't been handled yet. See [`Ticker::calc_now()`].
+    //!
+    //! The only requirement is that the LeTimer interrupt is never delayed by more than half a period
+    //! (i.e. ~1s at 32.768 kHz, ~32s at 1 kHz).
+
     use crate::{
         pac::interrupt,
         timer_le::{
             ChannelId, Config, Interrupt, InterruptConfig, Interrupts, LeTimerId, LeTimerRegs,
+            Repmode,
         },
     };
     use core::{
-        cell::RefCell,
-        sync::atomic::{AtomicBool, AtomicU32, Ordering},
+        cell::{Cell, RefCell},
+        sync::atomic::{AtomicBool, AtomicU32, Ordering, compiler_fence},
     };
     use critical_section::{CriticalSection, Mutex};
     use embassy_time_driver::Driver;
     use embassy_time_queue_utils::Queue;
 
     /// Embassy time driver using LeTimer<PN> peripheral
-    pub struct Ticker<const PN: u8> {
-        /// Number of times the timer counter overflowed
-        /// LeTimer is actually count-down, but we're calling this `overflow` just to avoid confusion
-        ovf_count: AtomicU32,
+    pub(crate) struct Ticker<const PN: u8> {
+        /// Number of elapsed half-periods (`0x8000` ticks each).
+        period: AtomicU32,
+        /// Timestamp of the next alarm, `u64::MAX` if no alarm is set
+        alarm_at: Mutex<Cell<u64>>,
         /// Initialization flag. If the ticker is not initialized, then [`Ticker::now()`] will just return `0`
         is_init: AtomicBool,
         /// Waker queue
@@ -74,17 +87,44 @@ pub(crate) mod time_driver {
     }
 
     impl<const PN: u8> Ticker<PN> {
-        /// Initialize the embassy time driver.
-        pub fn init() {
+        /// Tick count (low 16 bits) at which the Comp1 (half-period) interrupt triggers
+        const HALF_PERIOD: u16 = 0x8000;
+
+        /// An alarm is only armed (Comp0 interrupt enabled) once it is closer than this many ticks.
+        ///
+        /// Comp0 only matches the low 16 bits, so arming earlier than one full period ahead would cause an early match.
+        /// [`Ticker::next_period()`] runs every `0x8000` ticks, so a `0xC000` window guarantees the alarm gets armed at
+        /// least `0x4000` ticks before it's due.
+        const ARM_WINDOW: u64 = 0xC000;
+
+        /// Uninitialized time driver, see [`Ticker::start()`]
+        const fn new() -> Self {
+            Self {
+                period: AtomicU32::new(0),
+                alarm_at: Mutex::new(Cell::new(u64::MAX)),
+                is_init: AtomicBool::new(false),
+                queue: Mutex::new(RefCell::new(Queue::new())),
+            }
+        }
+
+        /// Configure and start the timer
+        fn start(&self) {
             let timer = Self::timer();
 
             timer.enable_clock();
             timer.configure(&Config {
+                // The half-period scheme needs the counter to wrap at `0xFFFF` and keep running
+                repeat_mode: Repmode::Free,
+                comp0_top: false,
+                buffered_top: false,
+                // Start at tick count `1`, so the first underflow only happens after a full count-down, when the tick
+                // count wraps `0xFFFF -> 0` (the counter doesn't start at `0`, so it doesn't immediately wrap)
                 count: u16::MAX,
-                comp0: u16::MAX,
-                comp1: u16::MAX,
+                // u16::MAX - (ticks - 1)
+                comp1: Self::HALF_PERIOD.wrapping_neg(),
                 interrupts: InterruptConfig {
-                    flags: Interrupts::new(Interrupt::Underflow).with_flag(Interrupt::Comp0),
+                    // Comp0 (alarm) interrupt stays disabled until an alarm is armed
+                    flags: Interrupts::new(Interrupt::Underflow).with_flag(Interrupt::Comp1),
                     // LeTimer IRQ is handled by the time driver itself
                     handler: None,
                 },
@@ -93,93 +133,123 @@ pub(crate) mod time_driver {
 
             // Enable the timer interrupt
             unsafe {
-                cortex_m::peripheral::NVIC::unmask(crate::pac::Interrupt::LETIMER0);
+                cortex_m::peripheral::NVIC::unmask(timer.interrupt());
             }
 
             // start the timer
             timer.start();
 
             // Mark the timer as initialized
-            EFEMB_TIME_DRIVER.is_init.store(true, Ordering::Relaxed);
+            self.is_init.store(true, Ordering::Relaxed);
         }
 
         /// Handle LeTimer interrupt
-        pub fn on_interrupt(&self) {
+        fn on_interrupt(&self) {
             let timer = Self::timer();
 
             critical_section::with(|cs| {
+                // Both just advance the half-period count, so the order in which they're handled doesn't matter
                 if timer.get_interrupt(Interrupt::Underflow) {
-                    self.ovf_count.fetch_add(1, Ordering::Relaxed);
                     timer.clear_interrupt(Interrupt::Underflow);
-                }
-
-                if timer.get_interrupt(Interrupt::Comp0) {
-                    timer.clear_interrupt(Interrupt::Comp0);
+                    self.next_period(cs);
                 }
 
                 if timer.get_interrupt(Interrupt::Comp1) {
                     timer.clear_interrupt(Interrupt::Comp1);
-                    timer.disable_interrupt(Interrupt::Comp1);
+                    self.next_period(cs);
                 }
 
-                let mut queue = self.queue.borrow(cs).borrow_mut();
+                // Timer interrupt was triggered by an alarm (which will be treated below)
+                if timer.get_interrupt(Interrupt::Comp0) {
+                    timer.clear_interrupt(Interrupt::Comp0);
+                }
 
-                loop {
-                    let next = queue.next_expiration(self.checked_now(&cs));
+                // Alarm triggered
+                if self.now() >= self.alarm_at.borrow(cs).get() {
+                    timer.disable_interrupt(Interrupt::Comp0);
+                    self.alarm_at.borrow(cs).set(u64::MAX);
 
-                    if self.set_alarm(&cs, self.checked_now(&cs), next) {
-                        break;
+                    let mut queue = self.queue.borrow(cs).borrow_mut();
+                    let mut next = queue.next_expiration(self.now());
+                    while !self.set_alarm(cs, next) {
+                        next = queue.next_expiration(self.now());
                     }
                 }
             });
         }
 
-        /// Set an interrupt to trigger at the given `next` logical time, relative to the current `now` logical time
-        fn set_alarm(&self, _cs: &CriticalSection, now: u64, next: u64) -> bool {
+        /// Advance the half-period count, and arm the alarm if it's due within [`Self::ARM_WINDOW`]
+        fn next_period(&self, cs: CriticalSection) {
             let timer = Self::timer();
+            let period = self.period.fetch_add(1, Ordering::Relaxed) + 1;
+            let now = (period as u64) << 15;
 
-            if now >= next {
-                // alarm has already expired
-                false
-            } else {
-                let now_count = (now & u16::MAX as u64) as u16;
-                let rem_of_count = u16::MAX - now_count;
-                let dif = next - now;
-
-                if dif < rem_of_count as u64 {
-                    // alarm will occur before next timer overflow
-                    let cnt = next % (u16::MAX as u64 + 1);
-
-                    timer.set_compare(ChannelId::Ch0, u16::MAX - (cnt as u16));
-                    timer.enable_interrupt(Interrupt::Comp0);
-                } else {
-                    // we'll set the alarm on one of the next timer overflows
-                    timer.disable_interrupt(Interrupt::Comp0);
-                }
-
-                true
+            if self.alarm_at.borrow(cs).get() < now + Self::ARM_WINDOW {
+                // Any pending Comp0 flag is usually from an earlier, unrelated match, since an alarm armed here is at
+                // least `0x4000` ticks away (otherwise it'd have been armed on the previous half-period).
+                // An alarm armed by [`Ticker::set_alarm()`] may be due already, though, and its flag gets cleared too:
+                // that's fine since [`Ticker::on_interrupt()`] checks the alarm against `now` after this.
+                timer.clear_interrupt(Interrupt::Comp0);
+                timer.enable_interrupt(Interrupt::Comp0);
             }
         }
 
-        /// Get the current logical time while in a critical section.
+        /// Set an interrupt to trigger at the given `at` logical time.
         ///
-        /// Useful because while in a critical section [`Ticker::ovf_count`] will not be incremented, so calling
-        /// [`Driver::now()`] would return an incorect (smaller) time, whic breaks the 'monotonic' timer spec.
-        ///
-        /// This will increment the overflow counter is the underflow flag is set.
-        fn checked_now(&self, _cs: &CriticalSection) -> u64 {
+        /// Returns `false` if `at` is already in the past, in which case no alarm is set.
+        fn set_alarm(&self, cs: CriticalSection, at: u64) -> bool {
             let timer = Self::timer();
+            let alarm = self.alarm_at.borrow(cs);
 
-            let ovf = if timer.get_interrupt(Interrupt::Underflow) {
-                timer.clear_interrupt(Interrupt::Underflow);
+            let now = self.now();
+            if at <= now {
+                // alarm has already expired
+                timer.disable_interrupt(Interrupt::Comp0);
+                alarm.set(u64::MAX);
+                return false;
+            }
 
-                self.ovf_count.fetch_add(1, Ordering::Relaxed) + 1
+            // Convert the driver's tick count (low 16 bits) to a `CNT`/`COMPn` register value
+            timer.set_compare(ChannelId::Ch0, (at as u16).wrapping_neg());
+            timer.clear_interrupt(Interrupt::Comp0);
+
+            if at - now < Self::ARM_WINDOW {
+                timer.enable_interrupt(Interrupt::Comp0);
             } else {
-                self.ovf_count.load(Ordering::Relaxed)
-            };
+                // [`Ticker::next_period()`] will arm it once it gets within range
+                timer.disable_interrupt(Interrupt::Comp0);
+            }
 
-            let counter = u16::MAX - timer.count();
-            (ovf as u64) << u16::BITS | counter as u64
+            // The counter may have passed `at` while the alarm was being set, in which case the Comp0 match was missed
+            if at <= self.now() {
+                timer.disable_interrupt(Interrupt::Comp0);
+                alarm.set(u64::MAX);
+                return false;
+            }
+
+            alarm.set(at);
+            true
+        }
+
+        /// Compute the logical time from the half-period count and the tick count
+        ///
+        /// The `counter` is **not** the `CNT` value from the timer register, since LeTimer counts _down_.
+        /// It's `CNT.wrapping_neg()`, i.e. the up-counter `u16::MAX - CNT` offset by `1`.
+        ///
+        /// The offset is needed because `UF` is set when `CNT` _reaches_ `0` (RM 19.3.3): it makes the tick count
+        /// wrap `0xFFFF -> 0` exactly when `UF` is set. Without it, `UF` would be set one tick _before_ the wrap,
+        /// and `now()` would jump ahead by almost a full period for that tick.
+        ///
+        /// If the counter is in the "wrong" half for the `period` parity, the corresponding interrupt hasn't been
+        /// handled yet, and XOR-ing the top bit compensates for it:
+        /// * even `period`, `counter >= 0x8000`: half-period interrupt pending, counter is used as-is
+        /// * odd `period`, `counter < 0x8000`: underflow interrupt pending, counter gets `0x8000` added (i.e. next
+        ///   period)
+        ///
+        /// Interrupts handled _late_ are fine as long as they're not delayed by more than half a period
+        /// (~1s at 32.768 kHz, ~32s at 1 kHz).
+        const fn calc_now(period: u32, counter: u16) -> u64 {
+            ((period as u64) << 15) + ((counter as u32 ^ ((period & 1) << 15)) as u64)
         }
 
         /// Get the LeTimer registers
@@ -193,39 +263,44 @@ pub(crate) mod time_driver {
 
     impl<const PN: u8> Driver for Ticker<PN> {
         fn now(&self) -> u64 {
-            if self.is_init.load(Ordering::Relaxed) {
-                let timer = Self::timer();
-                loop {
-                    let ovf_before = self.ovf_count.load(Ordering::SeqCst);
-                    // An underflow that the interrupt hasn't counted yet (e.g. it is held off by a
-                    // critical section) still has to be counted, or time would jump back one period
-                    let uf_before = timer.get_interrupt(Interrupt::Underflow);
-                    let counter = u16::MAX - timer.count();
-                    let uf = timer.get_interrupt(Interrupt::Underflow);
-                    let ovf = self.ovf_count.load(Ordering::SeqCst);
-                    // Retry if the interrupt ran, or an underflow happened, while reading the counter
-                    if ovf_before == ovf && uf_before == uf {
-                        break ((ovf + uf as u32) as u64) << u16::BITS | counter as u64;
-                    }
-                }
-            } else {
+            if !self.is_init.load(Ordering::Relaxed) {
                 // Ticker not initialized
-                0
+                return 0;
             }
+
+            // `period` must be read before the counter, see [`calc_now()`]
+            let period = self.period.load(Ordering::Relaxed);
+            compiler_fence(Ordering::Acquire);
+            // Convert a `CNT` register value to the driver's tick count (low 16 bits).
+            //
+            // LeTimer counts _down_, so ticks are counted from `CNT = 0`: the logical up-counter is `u16::MAX - CNT`,
+            // offset by `1` because the underflow flag is set when `CNT` _reaches_ `0` (RM 19.3.3). This aligns the
+            // underflow interrupt with the tick count wrapping `0xFFFF -> 0`
+            let counter = Self::timer().count().wrapping_neg();
+
+            Self::calc_now(period, counter)
         }
 
         fn schedule_wake(&self, at: u64, waker: &core::task::Waker) {
-            let timer = Self::timer();
-
             critical_section::with(|cs| {
                 let mut queue = self.queue.borrow(cs).borrow_mut();
                 if queue.schedule_wake(at, waker) {
-                    // Use the Comp1 interrupt flag to trigger the [`Ticker::on_interrupt()`] execution, which will handle
-                    // setting the timer alarm.
-                    timer.enable_interrupt(Interrupt::Comp1);
-                    timer.set_interrupt(Interrupt::Comp1);
+                    let mut next = queue.next_expiration(self.now());
+                    while !self.set_alarm(cs, next) {
+                        next = queue.next_expiration(self.now());
+                    }
                 }
             });
+        }
+    }
+
+    #[cfg(feature = "_timdrv-letim0")]
+    impl Ticker<0> {
+        /// Initialize the embassy time driver
+        pub(crate) fn init() {
+            // Typed binding: if the static isn't a `Ticker<0>`, this doesn't compile
+            let driver: &'static Ticker<0> = &EFEMB_TIME_DRIVER;
+            driver.start();
         }
     }
 
@@ -236,9 +311,5 @@ pub(crate) mod time_driver {
     }
 
     #[cfg(feature = "_timdrv-letim0")]
-    embassy_time_driver::time_driver_impl!(static EFEMB_TIME_DRIVER: Ticker<0> = Ticker {
-        ovf_count:AtomicU32::new(0),
-        is_init:AtomicBool::new(false),
-        queue: Mutex::new(RefCell::new(Queue::new())),
-    });
+    embassy_time_driver::time_driver_impl!(static EFEMB_TIME_DRIVER: Ticker<0> = Ticker::new());
 }
