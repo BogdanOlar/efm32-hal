@@ -55,6 +55,9 @@ pub(crate) mod time_driver {
 
             // Enable LE Timer
             CMU.lfaclken0().modify(|w| w.set_letimer(PN as usize, true));
+            while CMU.syncbusy().read().lfaclken0() {
+                cortex_m::asm::nop()
+            }
 
             // Stop the timer if it's running
             if p.status().read().running() {
