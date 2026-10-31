@@ -13,6 +13,7 @@ use crate::{
     Sealed, SingleCycleRMW,
     cmu::Clocks,
     gpio::pin::Pin,
+    pac::timer::regs::Ifs,
     peripherals, prs,
     timer::irq::{TIMER_HANDLER, default_handler},
 };
@@ -105,45 +106,11 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
             ch3: Channel::new(&peri),
         };
         let mut instance = Self { peri, channels };
-        let p = instance.peri.regs();
 
-        NVIC::mask(instance.peri.interrupt());
+        NVIC::mask(instance.regs().interrupt());
 
-        // Enable the timer peripheral clock for this instance.
-        crate::pac::CMU
-            .hfperclken0()
-            .modify(|w| w.set_timer(instance.peri.id() as usize, true));
-
-        instance.stop();
-        instance.disable_interrupts(Interrupts::ALL);
-        instance.clear_interrupts(Interrupts::ALL);
-
-        p.ctrl().write(|w| {
-            w.set_mode(config.mode);
-            w.set_sync(config.synchronized);
-            w.set_osmen(config.one_shot);
-            w.set_clksel(config.clock);
-            w.set_presc(config.presc);
-        });
-        p.cnt().write(|w| w.set_cnt(config.count));
-        p.top().write(|w| w.set_top(config.top));
-
-        instance
-            .channels
-            .ch0
-            .set_config(&config.channels.configs[ChannelId::Ch0 as usize]);
-        instance
-            .channels
-            .ch1
-            .set_config(&config.channels.configs[ChannelId::Ch1 as usize]);
-        instance
-            .channels
-            .ch2
-            .set_config(&config.channels.configs[ChannelId::Ch2 as usize]);
-        instance
-            .channels
-            .ch3
-            .set_config(&config.channels.configs[ChannelId::Ch3 as usize]);
+        instance.regs().enable_clock();
+        instance.regs().configure(config);
 
         // Handle interrupt configs
         match config.interrupts.handler {
@@ -151,9 +118,8 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
             Some(handler) => instance.set_irq_handler(handler),
             None => instance.clear_irq_handler(),
         }
-        instance.enable_interrupts(config.interrupts.flags);
         unsafe {
-            NVIC::unmask(instance.peri.interrupt());
+            NVIC::unmask(instance.regs().interrupt());
         };
 
         instance
@@ -161,22 +127,22 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
 
     /// Start Timer
     pub fn start(&mut self) {
-        self.peri.regs().cmd().write(|w| w.set_start(true));
+        self.regs().start();
     }
 
     /// Stop Timer
     pub fn stop(&mut self) {
-        self.peri.regs().cmd().write(|w| w.set_stop(true));
+        self.regs().stop();
     }
 
     /// Get Timer count value
     pub fn count(&mut self) -> u16 {
-        self.peri.regs().cnt().read().cnt()
+        self.regs().count()
     }
 
     /// Set Timer count value
     pub fn set_count(&mut self, count: u16) {
-        self.peri.regs().cnt().write(|w| w.set_cnt(count));
+        self.regs().set_count(count);
     }
 
     /// Wait for timer flag by polling the peripheral interrupt flag
@@ -192,47 +158,47 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
 
     /// Enable single interrupt
     pub fn enable_interrupt(&mut self, flag: Interrupt) {
-        self.peri.regs().ien().sc_set(1u32 << flag as u8);
+        self.regs().enable_interrupt(flag);
     }
 
-    /// Set single interrupt flag
+    /// Get single interrupt flag
     pub fn get_interrupt(&self, flag: Interrupt) -> bool {
-        (self.peri.regs().if_().read().0 & (1u32 << flag as u8)) != 0
+        self.regs().get_interrupt(flag)
     }
 
     /// Set single interrupt flag
     pub fn set_interrupt(&mut self, flag: Interrupt) {
-        self.peri.regs().ifs().sc_set(1u32 << flag as u8);
+        self.regs().set_interrupt(flag);
     }
 
     /// Clear single interrupt flag
     pub fn clear_interrupt(&mut self, flag: Interrupt) {
-        self.peri.regs().ifc().sc_set(1u32 << flag as u8);
+        self.regs().clear_interrupt(flag);
     }
 
     /// Enable multiple interrupts
     pub fn enable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_set(flags.0);
+        self.regs().enable_interrupts(flags);
     }
 
     /// Disable multiple interrupts
     pub fn disable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_clear(flags.0);
+        self.regs().disable_interrupts(flags);
     }
 
     /// Get all interrupt flags
     pub fn get_interrupts(&mut self) -> Interrupts {
-        Interrupts::new_unchecked(self.peri.regs().if_().read().0)
+        self.regs().get_interrupts()
     }
 
     /// Set multiple interrupt flags
     pub fn set_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifs().sc_set(flags.0);
+        self.regs().set_interrupts(flags);
     }
 
     /// Clear multiple interrupt flags
     pub fn clear_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifc().sc_set(flags.0);
+        self.regs().clear_interrupts(flags);
     }
 
     /// Async await for timer interrupt
@@ -255,6 +221,146 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
                 .borrow(cs)
                 .replace(default_handler)
         });
+    }
+
+    /// Register-level operations for this timer
+    fn regs(&self) -> TimerRegs {
+        TimerRegs::new(self.peri.id())
+    }
+}
+
+/// Register-level Timer operations, without peripheral ownership.
+///
+/// This is what [`Timer`] uses under the hood, and what the HAL can use for Timer peripherals it keeps for itself
+/// (e.g. the embassy time driver). Unlike [`Timer`], it doesn't guarantee exclusive access to the peripheral, so it's
+/// up to the user to avoid conflicting accesses.
+#[derive(Clone, Copy)]
+pub(crate) struct TimerRegs {
+    regs: crate::pac::timer::Timer,
+    id: TimerId,
+}
+
+impl TimerRegs {
+    /// Registers of the Timer peripheral with the given `id`
+    pub(crate) const fn new(id: TimerId) -> Self {
+        let regs = match id {
+            TimerId::Timer0 => crate::pac::TIMER0,
+            TimerId::Timer1 => crate::pac::TIMER1,
+        };
+        Self { regs, id }
+    }
+
+    /// Interrupt of this Timer peripheral
+    pub(crate) const fn interrupt(&self) -> crate::pac::Interrupt {
+        match self.id {
+            TimerId::Timer0 => crate::pac::Interrupt::TIMER0,
+            TimerId::Timer1 => crate::pac::Interrupt::TIMER1,
+        }
+    }
+
+    /// Enable the peripheral clock
+    pub(crate) fn enable_clock(&self) {
+        crate::pac::CMU
+            .hfperclken0()
+            .modify(|w| w.set_timer(self.id as usize, true));
+    }
+
+    /// Stop the timer, and apply the given `config` (except for the interrupt handler)
+    pub(crate) fn configure(&self, config: &Config) {
+        self.stop();
+        self.disable_interrupts(Interrupts::ALL);
+        self.clear_interrupts(Interrupts::ALL);
+
+        self.regs.ctrl().write(|w| {
+            w.set_mode(config.mode);
+            w.set_sync(config.synchronized);
+            w.set_osmen(config.one_shot);
+            w.set_clksel(config.clock);
+            w.set_presc(config.presc);
+        });
+        self.set_count(config.count);
+        self.regs.top().write(|w| w.set_top(config.top));
+
+        for (cn, cc_config) in config.channels.configs.iter().enumerate() {
+            self.configure_channel(cn, cc_config);
+        }
+
+        self.enable_interrupts(config.interrupts.flags);
+    }
+
+    /// Apply the given `config` to the Capture/Compare channel `cn`
+    pub(crate) fn configure_channel(&self, cn: usize, config: &CcConfig) {
+        self.regs.cc(cn).ctrl().write(|w| {
+            w.set_mode(config.mode);
+            w.set_icedge(config.ic_edge_select);
+            w.set_icevctrl(config.ic_event_control);
+        });
+        match config.input_sel {
+            CcInputSel::Pin(loc) => {
+                self.regs.cc(cn).ctrl().modify(|w| {
+                    w.set_insel(false);
+                });
+                self.regs.routeloc0().modify(|w| w.set_cc_loc(cn, loc));
+            }
+            CcInputSel::Prs(prs_channel_id) => {
+                self.regs.cc(cn).ctrl().modify(|w| {
+                    w.set_insel(true);
+                    w.set_prssel(CcCtrlPrssel::from_bits(prs_channel_id as u8));
+                });
+            }
+        }
+    }
+
+    pub(crate) fn start(&self) {
+        self.regs.cmd().write(|w| w.set_start(true));
+    }
+
+    pub(crate) fn stop(&self) {
+        self.regs.cmd().write(|w| w.set_stop(true));
+    }
+
+    pub(crate) fn count(&self) -> u16 {
+        self.regs.cnt().read().cnt()
+    }
+
+    pub(crate) fn set_count(&self, count: u16) {
+        self.regs.cnt().write(|w| w.set_cnt(count));
+    }
+
+    pub(crate) fn enable_interrupt(&self, flag: Interrupt) {
+        self.enable_interrupts(Interrupts::new(flag));
+    }
+
+    pub(crate) fn get_interrupt(&self, flag: Interrupt) -> bool {
+        self.get_interrupts().is_set(flag)
+    }
+
+    pub(crate) fn set_interrupt(&self, flag: Interrupt) {
+        self.set_interrupts(Interrupts::new(flag));
+    }
+
+    pub(crate) fn clear_interrupt(&self, flag: Interrupt) {
+        self.clear_interrupts(Interrupts::new(flag));
+    }
+
+    pub(crate) fn enable_interrupts(&self, flags: Interrupts) {
+        self.regs.ien().sc_set(flags.0);
+    }
+
+    pub(crate) fn disable_interrupts(&self, flags: Interrupts) {
+        self.regs.ien().sc_clear(flags.0);
+    }
+
+    pub(crate) fn get_interrupts(&self) -> Interrupts {
+        Interrupts::new_unchecked(self.regs.if_().read().0)
+    }
+
+    pub(crate) fn set_interrupts(&self, flags: Interrupts) {
+        self.regs.ifs().write_value(Ifs(flags.0));
+    }
+
+    pub(crate) fn clear_interrupts(&self, flags: Interrupts) {
+        self.regs.ifc().write_value(Ifs(flags.0));
     }
 }
 
@@ -363,28 +469,7 @@ impl<'d, T: TimerInstance, const CN: u8> Channel<'d, T, CN> {
 
     /// Set channel config
     pub fn set_config(&mut self, config: &CcConfig) {
-        self.peri.regs().cc(CN as usize).ctrl().write(|w| {
-            w.set_mode(config.mode);
-            w.set_icedge(config.ic_edge_select);
-            w.set_icevctrl(config.ic_event_control);
-        });
-        match config.input_sel {
-            CcInputSel::Pin(loc) => {
-                self.peri.regs().cc(CN as usize).ctrl().modify(|w| {
-                    w.set_insel(false);
-                });
-                self.peri
-                    .regs()
-                    .routeloc0()
-                    .modify(|w| w.set_cc_loc(CN as usize, loc));
-            }
-            CcInputSel::Prs(prs_channel_id) => {
-                self.peri.regs().cc(CN as usize).ctrl().modify(|w| {
-                    w.set_insel(true);
-                    w.set_prssel(CcCtrlPrssel::from_bits(prs_channel_id as u8));
-                });
-            }
-        }
+        TimerRegs::new(self.peri.id()).configure_channel(CN as usize, config);
     }
 
     /// Convert timer channel to a PWM

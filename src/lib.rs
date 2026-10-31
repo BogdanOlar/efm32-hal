@@ -36,7 +36,7 @@ embassy_hal_internal::peripherals!(
     Gpcrc,
     Cryotimer,
     Rtcc,
-    // Only expose the LeTimer0 HAL peripheral if it is **not** used for the embassy timer driver
+    // Only hand out the LeTimer0 HAL peripheral if it is **not** used for the embassy timer driver
     #[cfg(not(feature = "_timdrv-letim0"))]
     LeTimer0,
     LeUart0,

@@ -78,13 +78,14 @@ efemb = [
 
 # An embassy time driver is selected (private feature, enabled by each `efemb-timdrv-*` feature)
 _timdrv = ["efemb"]
+
 # Using one of the LeTimer peripherals as the embassy time driver
 _timdrv-letim = ["_timdrv"]
 # LeTimer0 as embassy timer base (private feature, use the ones below this one)
 _timdrv-letim0 = ["_timdrv-letim"]
-#### Use LeTimer0 as embassy timer base with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+## Use LeTimer0 as embassy timer base with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
 efemb-timdrv-letim0-hz-32_768 = ["_timdrv-letim0", "embassy-time-driver/tick-hz-32_768"]
-#### Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
+## Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
 efemb-timdrv-letim0-hz-1_000 = ["_timdrv-letim0", "embassy-time-driver/tick-hz-1_000"]
 
 # Debug option for DMA to set max transfer size to `1<<5` instead of `1<<12`
