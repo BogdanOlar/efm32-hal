@@ -8,7 +8,6 @@ use efm32_hal::{
     init,
     pac::Interrupt,
     prelude::*,
-    timer_le::efemb::Ticker,
 };
 use embassy_executor::Spawner;
 // @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
@@ -18,11 +17,8 @@ use panic_halt as _;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    // Also initializes the embassy time driver, which provides the logging timestamps
     let p = init();
-
-    // Initialize the embassy time driver in order to get logging timestamps (LfAClk is ncecessary for LeTimer0)
-    let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-    Ticker::init();
 
     // Initialize GPIO
     let gpio = Gpio::new(p.Gpio);

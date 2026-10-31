@@ -76,8 +76,10 @@ efemb = [
 
 ## Embassy time driver
 
+# An embassy time driver is selected (private feature, enabled by each `efemb-timdrv-*` feature)
+_timdrv = ["efemb"]
 # Using one of the LeTimer peripherals as the embassy time driver
-_timdrv-letim = ["efemb"]
+_timdrv-letim = ["_timdrv"]
 # LeTimer0 as embassy timer base (private feature, use the ones below this one)
 _timdrv-letim0 = ["_timdrv-letim"]
 #### Use LeTimer0 as embassy timer base with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
