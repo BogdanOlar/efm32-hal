@@ -49,8 +49,10 @@ impl<'d, T: LeTimerInstance> core::future::Future for InterruptsFuture<'d, T> {
 #[cfg(feature = "_timdrv-letim")]
 pub(crate) mod time_driver {
     use crate::{
-        pac::{CMU, Interrupt, interrupt},
-        timer_le::Interrupts,
+        pac::interrupt,
+        timer_le::{
+            ChannelId, Config, Interrupt, InterruptConfig, Interrupts, LeTimerId, LeTimerRegs,
+        },
     };
     use core::{
         cell::RefCell,
@@ -74,41 +76,28 @@ pub(crate) mod time_driver {
     impl<const PN: u8> Ticker<PN> {
         /// Initialize the embassy time driver.
         pub fn init() {
-            let p = Self::p();
+            let timer = Self::timer();
 
-            // Enable LE Timer
-            CMU.lfaclken0().modify(|w| w.set_letimer(PN as usize, true));
-            while CMU.syncbusy().read().lfaclken0() {
-                cortex_m::asm::nop()
-            }
-
-            // Stop the timer if it's running
-            if p.status().read().running() {
-                p.cmd().write(|w| w.set_stop(true));
-            }
-
-            // Manually checked RM that all fields default to 0 at reset/POR
-            p.ctrl().write_value(Default::default());
-            p.cnt().write(|w| w.set_cnt(u16::MAX));
-            p.comp0().write(|w| w.set_comp0(u16::MAX));
-            p.comp1().write(|w| w.set_comp1(u16::MAX));
-            p.rep0().write(|w| w.set_rep0(0));
-            p.rep1().write(|w| w.set_rep1(0));
-            p.ien().write_value(crate::pac::letimer::regs::Ien(
-                Interrupts::new(crate::timer_le::Interrupt::Underflow)
-                    .with_flag(crate::timer_le::Interrupt::Comp0)
-                    .into(),
-            ));
-            p.ifc()
-                .write_value(crate::pac::letimer::regs::Ifs(Interrupts::ALL.into()));
+            timer.enable_clock();
+            timer.configure(&Config {
+                count: u16::MAX,
+                comp0: u16::MAX,
+                comp1: u16::MAX,
+                interrupts: InterruptConfig {
+                    flags: Interrupts::new(Interrupt::Underflow).with_flag(Interrupt::Comp0),
+                    // LeTimer IRQ is handled by the time driver itself
+                    handler: None,
+                },
+                ..Default::default()
+            });
 
             // Enable the timer interrupt
             unsafe {
-                cortex_m::peripheral::NVIC::unmask(Interrupt::LETIMER0);
+                cortex_m::peripheral::NVIC::unmask(crate::pac::Interrupt::LETIMER0);
             }
 
             // start the timer
-            p.cmd().write(|w| w.set_start(true));
+            timer.start();
 
             // Mark the timer as initialized
             EFEMB_TIME_DRIVER.is_init.store(true, Ordering::Relaxed);
@@ -116,21 +105,21 @@ pub(crate) mod time_driver {
 
         /// Handle LeTimer interrupt
         pub fn on_interrupt(&self) {
-            let p = Self::p();
+            let timer = Self::timer();
 
             critical_section::with(|cs| {
-                if p.if_().read().uf() {
+                if timer.get_interrupt(Interrupt::Underflow) {
                     self.ovf_count.fetch_add(1, Ordering::Relaxed);
-                    p.ifc().write(|w| w.set_uf(true));
+                    timer.clear_interrupt(Interrupt::Underflow);
                 }
 
-                if p.if_().read().comp0() {
-                    p.ifc().write(|w| w.set_comp0(true));
+                if timer.get_interrupt(Interrupt::Comp0) {
+                    timer.clear_interrupt(Interrupt::Comp0);
                 }
 
-                if p.if_().read().comp1() {
-                    p.ifc().write(|w| w.set_comp1(true));
-                    p.ien().modify(|w| w.set_comp1(false));
+                if timer.get_interrupt(Interrupt::Comp1) {
+                    timer.clear_interrupt(Interrupt::Comp1);
+                    timer.disable_interrupt(Interrupt::Comp1);
                 }
 
                 let mut queue = self.queue.borrow(cs).borrow_mut();
@@ -147,7 +136,7 @@ pub(crate) mod time_driver {
 
         /// Set an interrupt to trigger at the given `next` logical time, relative to the current `now` logical time
         fn set_alarm(&self, _cs: &CriticalSection, now: u64, next: u64) -> bool {
-            let p = Self::p();
+            let timer = Self::timer();
 
             if now >= next {
                 // alarm has already expired
@@ -161,11 +150,11 @@ pub(crate) mod time_driver {
                     // alarm will occur before next timer overflow
                     let cnt = next % (u16::MAX as u64 + 1);
 
-                    p.comp0().write(|w| w.set_comp0(u16::MAX - (cnt as u16)));
-                    p.ien().modify(|w| w.set_comp0(true));
+                    timer.set_compare(ChannelId::Ch0, u16::MAX - (cnt as u16));
+                    timer.enable_interrupt(Interrupt::Comp0);
                 } else {
                     // we'll set the alarm on one of the next timer overflows
-                    p.ien().modify(|w| w.set_comp0(false));
+                    timer.disable_interrupt(Interrupt::Comp0);
                 }
 
                 true
@@ -179,24 +168,24 @@ pub(crate) mod time_driver {
         ///
         /// This will increment the overflow counter is the underflow flag is set.
         fn checked_now(&self, _cs: &CriticalSection) -> u64 {
-            let p = Self::p();
+            let timer = Self::timer();
 
-            let ovf = if p.if_().read().uf() {
-                p.ifc().write(|w| w.set_uf(true));
+            let ovf = if timer.get_interrupt(Interrupt::Underflow) {
+                timer.clear_interrupt(Interrupt::Underflow);
 
                 self.ovf_count.fetch_add(1, Ordering::Relaxed) + 1
             } else {
                 self.ovf_count.load(Ordering::Relaxed)
             };
 
-            let counter = u16::MAX - p.cnt().read().cnt();
+            let counter = u16::MAX - timer.count();
             (ovf as u64) << u16::BITS | counter as u64
         }
 
-        /// Get the LeTimer pac peripheral
-        const fn p() -> crate::pac::letimer::LeTimer {
+        /// Get the LeTimer registers
+        const fn timer() -> LeTimerRegs {
             match PN {
-                0 => crate::pac::LETIMER0,
+                0 => LeTimerRegs::new(LeTimerId::LeTimer0),
                 _ => unreachable!(),
             }
         }
@@ -205,14 +194,14 @@ pub(crate) mod time_driver {
     impl<const PN: u8> Driver for Ticker<PN> {
         fn now(&self) -> u64 {
             if self.is_init.load(Ordering::Relaxed) {
-                let p = Self::p();
+                let timer = Self::timer();
                 loop {
                     let ovf_before = self.ovf_count.load(Ordering::SeqCst);
                     // An underflow that the interrupt hasn't counted yet (e.g. it is held off by a
                     // critical section) still has to be counted, or time would jump back one period
-                    let uf_before = p.if_().read().uf();
-                    let counter = u16::MAX - p.cnt().read().cnt();
-                    let uf = p.if_().read().uf();
+                    let uf_before = timer.get_interrupt(Interrupt::Underflow);
+                    let counter = u16::MAX - timer.count();
+                    let uf = timer.get_interrupt(Interrupt::Underflow);
                     let ovf = self.ovf_count.load(Ordering::SeqCst);
                     // Retry if the interrupt ran, or an underflow happened, while reading the counter
                     if ovf_before == ovf && uf_before == uf {
@@ -226,15 +215,15 @@ pub(crate) mod time_driver {
         }
 
         fn schedule_wake(&self, at: u64, waker: &core::task::Waker) {
-            let p = Self::p();
+            let timer = Self::timer();
 
             critical_section::with(|cs| {
                 let mut queue = self.queue.borrow(cs).borrow_mut();
                 if queue.schedule_wake(at, waker) {
                     // Use the Comp1 interrupt flag to trigger the [`Ticker::on_interrupt()`] execution, which will handle
                     // setting the timer alarm.
-                    p.ien().modify(|w| w.set_comp1(true));
-                    p.ifs().write(|w| w.set_comp1(true));
+                    timer.enable_interrupt(Interrupt::Comp1);
+                    timer.set_interrupt(Interrupt::Comp1);
                 }
             });
         }
