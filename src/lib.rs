@@ -91,6 +91,9 @@ pub fn init() -> Peripherals {
         }
     }
 
+    // Pacify clippy
+    let _ = cmu.freeze();
+
     peripherals
 }
 
