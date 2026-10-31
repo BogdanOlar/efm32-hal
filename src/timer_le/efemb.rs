@@ -1,7 +1,7 @@
 //! Embassy time driver implementation for LeTimer
 //!
 
-#[cfg(any(feature = "_timdrv-letim0"))]
+#[cfg(feature = "_timdrv-letim")]
 pub(crate) mod time_driver {
     use crate::{
         pac::{CMU, Interrupt, interrupt},
@@ -28,28 +28,6 @@ pub(crate) mod time_driver {
 
     impl<const PN: u8> Ticker<PN> {
         /// Initialize the embassy time driver.
-        ///
-        /// WARNING: LfAClk needs to be enabled, and the HfClk source clock needs to be one of the HF sources (i.e. not LF),
-        ///          otherwise you'll get a bus fault.
-        ///
-        /// For example, if you want the timer driver to run at 32.768 kHz, make sure to enable the
-        /// `efemb-timdrv-letim0-hz-32_768` crate feature, and initialize the clock sources
-        ///
-        /// ```rust,no_run
-        /// let _clocks = p
-        ///     .cmu
-        ///     .split()
-        ///     .with_hf_clk(HfClockSource::HfRco, HfClockPrescaler::Div1)
-        ///     .with_lfa_clk(LfClockSource::LfRco);
-        /// ```
-        ///
-        /// For a 1 kKz timer, enable the `efemb-timdrv-letim0-hz-1_000` feature, and configure the LfAClk
-        ///
-        /// ```rust,no_run
-        /// let _clocks = p
-        ///     // ...
-        ///     .with_lfa_clk(LfClockSource::UlfRco);
-        /// ```
         pub fn init() {
             let p = Self::p();
 

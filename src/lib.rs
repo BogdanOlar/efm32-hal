@@ -22,14 +22,6 @@ pub mod timer;
 pub mod timer_le;
 pub mod usart;
 
-mod sealed {
-    /// Sealed (typestate) marker trait for singleton types.
-    /// Used to ensure that certain types may not be instantiated outside this crate.
-    pub trait Sealed {}
-}
-
-pub(crate) use sealed::Sealed;
-
 // Generate the HAL peripheral singletons. Corresponding drivers can use these to create driver instances.
 embassy_hal_internal::peripherals!(
     Acmp0,
@@ -158,3 +150,11 @@ impl<T: Copy, A: crate::pac::common::Access> SingleCycleRMW for crate::pac::comm
         unsafe { (addr as *mut u32).write_volatile(mask) };
     }
 }
+
+mod sealed {
+    /// Sealed (typestate) marker trait for singleton types.
+    /// Used to ensure that certain types may not be instantiated outside this crate.
+    pub trait Sealed {}
+}
+
+pub(crate) use sealed::Sealed;

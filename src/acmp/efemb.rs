@@ -2,6 +2,7 @@
 
 use crate::acmp::{AcmpId, AcmpInstance, Interrupts};
 use core::sync::atomic::AtomicU32;
+#[cfg(feature = "defmt")]
 use defmt::warn;
 use embassy_hal_internal::Peri;
 
@@ -12,6 +13,7 @@ static ACMP_RAW_FLAGS: [AtomicU32; AcmpId::COUNT] = [const { AtomicU32::new(0) }
 pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
     let old = ACMP_RAW_FLAGS[PN as usize].swap(flags.into(), core::sync::atomic::Ordering::SeqCst);
 
+    #[cfg(feature = "defmt")]
     if old != 0 {
         warn!("ACMP: IRQ unhandled raw flags {}", old);
     }

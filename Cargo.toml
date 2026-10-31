@@ -76,8 +76,10 @@ efemb = [
 
 ## Embassy time driver
 
-### LeTimer0 as embassy timer base (private feature, use the ones below this one)
-_timdrv-letim0 = ["efemb"]
+# Using one of the LeTimer peripherals as the embassy time driver
+_timdrv-letim = ["efemb"]
+# LeTimer0 as embassy timer base (private feature, use the ones below this one)
+_timdrv-letim0 = ["_timdrv-letim"]
 #### Use LeTimer0 as embassy timer base with 32768 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
 efemb-timdrv-letim0-hz-32_768 = ["_timdrv-letim0", "embassy-time-driver/tick-hz-32_768"]
 #### Use LeTimer0 as embassy timer base, with 1000 Hz tick rate, and specify the tick rate to the `embassy-time-driver`
@@ -103,7 +105,7 @@ defmt = [
 # Module level debug features
 ## Spi
 ### Print out some `info!()` about events related to Spi DMA transaction
-debug-spi-dma-defmt-info = []
+debug-spi-dma-defmt-info = ["defmt"]
 
 [profile.release]
 codegen-units    = 1     # LLVM can perform better optimizations using a single thread
