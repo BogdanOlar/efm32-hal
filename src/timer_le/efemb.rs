@@ -102,7 +102,7 @@ pub(crate) mod time_driver {
 
                 if p.if_().read().comp1() {
                     p.ifc().write(|w| w.set_comp1(true));
-                    p.ien().write(|w| w.set_comp1(false));
+                    p.ien().modify(|w| w.set_comp1(false));
                 }
 
                 let mut queue = self.queue.borrow(cs).borrow_mut();
@@ -134,10 +134,10 @@ pub(crate) mod time_driver {
                     let cnt = next % (u16::MAX as u64 + 1);
 
                     p.comp0().write(|w| w.set_comp0(u16::MAX - (cnt as u16)));
-                    p.ien().write(|w| w.set_comp0(true));
+                    p.ien().modify(|w| w.set_comp0(true));
                 } else {
                     // we'll set the alarm on one of the next timer overflows
-                    p.ien().write(|w| w.set_comp0(false));
+                    p.ien().modify(|w| w.set_comp0(false));
                 }
 
                 true
@@ -180,10 +180,15 @@ pub(crate) mod time_driver {
                 let p = Self::p();
                 loop {
                     let ovf_before = self.ovf_count.load(Ordering::SeqCst);
+                    // An underflow that the interrupt hasn't counted yet (e.g. it is held off by a
+                    // critical section) still has to be counted, or time would jump back one period
+                    let uf_before = p.if_().read().uf();
                     let counter = u16::MAX - p.cnt().read().cnt();
+                    let uf = p.if_().read().uf();
                     let ovf = self.ovf_count.load(Ordering::SeqCst);
-                    if ovf_before == ovf {
-                        break (ovf as u64) << u16::BITS | counter as u64;
+                    // Retry if the interrupt ran, or an underflow happened, while reading the counter
+                    if ovf_before == ovf && uf_before == uf {
+                        break ((ovf + uf as u32) as u64) << u16::BITS | counter as u64;
                     }
                 }
             } else {
@@ -200,7 +205,7 @@ pub(crate) mod time_driver {
                 if queue.schedule_wake(at, waker) {
                     // Use the Comp1 interrupt flag to trigger the [`Ticker::on_interrupt()`] execution, which will handle
                     // setting the timer alarm.
-                    p.ien().write(|w| w.set_comp1(true));
+                    p.ien().modify(|w| w.set_comp1(true));
                     p.ifs().write(|w| w.set_comp1(true));
                 }
             });
