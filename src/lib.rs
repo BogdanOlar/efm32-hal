@@ -41,6 +41,8 @@ embassy_hal_internal::peripherals_struct!(
     Timer1,
     Gpcrc,
     Cryotimer,
+    // Only hand out the Rtcc HAL peripheral if it is **not** used for the embassy timer driver
+    #[cfg(not(feature = "_timdrv-rtcc"))]
     Rtcc,
     // Only hand out the LeTimer0 HAL peripheral if it is **not** used for the embassy timer driver
     #[cfg(not(feature = "_timdrv-letim0"))]
@@ -82,6 +84,14 @@ pub fn init() -> Peripherals {
     let cmu = cmu.with_lfa_clk(crate::cmu::LfClockSource::UlfRco);
     #[cfg(feature = "_timdrv-letim0")]
     timer_le::efemb::time_driver::Ticker::<peripherals::LeTimer0>::init();
+
+    // Rtcc
+    #[cfg(feature = "efemb-timdrv-rtcc-hz-32_768")]
+    let cmu = cmu.with_lfe_clk(crate::cmu::LfClockSource::LfRco);
+    #[cfg(feature = "efemb-timdrv-rtcc-hz-1_000")]
+    let cmu = cmu.with_lfe_clk(crate::cmu::LfClockSource::UlfRco);
+    #[cfg(feature = "_timdrv-rtcc")]
+    rtcc::efemb::time_driver::Ticker::init();
 
     // Compile-time error if no driver is selected
     #[cfg(all(feature = "efemb", not(feature = "_timdrv")))]

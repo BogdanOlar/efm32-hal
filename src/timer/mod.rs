@@ -6,7 +6,7 @@ pub mod efemb;
 pub mod irq;
 
 pub use crate::pac::timer::vals::{
-    CcCtrlCmoa, CcCtrlIcedge, CcCtrlIcevctrl, CcCtrlMode, CcCtrlPrssel, CcLoc, Clksel, CtrlMode,
+    CcCtrlCmoa, CcCtrlIcEdge, CcCtrlIcEvCtrl, CcCtrlMode, CcCtrlPrsSel, CcLoc, Clksel, CtrlMode,
     Presc,
 };
 use crate::{
@@ -382,7 +382,7 @@ impl<'d, T: TimerInstance, const CN: u8> Channel<'d, T, CN> {
             CcInputSel::Prs(prs_channel_id) => {
                 self.peri.regs().cc(CN as usize).ctrl().modify(|w| {
                     w.set_insel(true);
-                    w.set_prssel(CcCtrlPrssel::from_bits(prs_channel_id as u8));
+                    w.set_prssel(CcCtrlPrsSel::from_bits(prs_channel_id as u8));
                 });
             }
         }
@@ -402,7 +402,7 @@ impl<'d, T: TimerInstance, const CN: u8> Channel<'d, T, CN> {
         p.routeloc0()
             .modify(|w| w.set_cc_loc(CN as usize, pin.loc()));
         p.cc(CN as usize).ctrl().write(|w| {
-            w.set_icedge(CcCtrlIcedge::Both);
+            w.set_icedge(CcCtrlIcEdge::Both);
             w.set_cmoa(CcCtrlCmoa::Toggle);
             w.set_mode(CcCtrlMode::Pwm)
         });
@@ -526,9 +526,9 @@ pub struct CcConfig {
     /// channel input select
     pub input_sel: CcInputSel,
     /// Input Capture Edge Select
-    pub ic_edge_select: CcCtrlIcedge,
+    pub ic_edge_select: CcCtrlIcEdge,
     /// Input Capture Event Control
-    pub ic_event_control: CcCtrlIcevctrl,
+    pub ic_event_control: CcCtrlIcEvCtrl,
 }
 
 impl Default for CcConfig {
@@ -536,8 +536,8 @@ impl Default for CcConfig {
         Self {
             mode: CcCtrlMode::Off,
             input_sel: Default::default(),
-            ic_edge_select: CcCtrlIcedge::Rising,
-            ic_event_control: CcCtrlIcevctrl::Everyedge,
+            ic_edge_select: CcCtrlIcEdge::Rising,
+            ic_event_control: CcCtrlIcEvCtrl::Everyedge,
         }
     }
 }

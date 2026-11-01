@@ -82,7 +82,6 @@ pub(crate) fn ien_clear(id: ChannelId) {
 
 /// Clear interrupt flag for channel
 pub(crate) fn ifc_set(id: ChannelId) {
-    // IFC is write-1-to-clear, so a plain write only clears this channel's flag
     dma().ifc().write_value(Ifs(1 << id as u8));
 }
 
