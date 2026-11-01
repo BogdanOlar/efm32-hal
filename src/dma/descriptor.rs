@@ -425,10 +425,7 @@ pub struct Descriptor {
 
 impl Descriptor {
     /// Maximum number of units (byte, half-word, word) which can be transfered in one DMA shot (`0x800`)
-    #[cfg(not(feature = "dma-debug-max-transfer"))]
     pub const MAX_TRANSFER_UNITS: usize = 1 << 11;
-    #[cfg(feature = "dma-debug-max-transfer")]
-    pub const MAX_TRANSFER_UNITS: usize = 1 << 5;
 
     pub(crate) const INDEX_CTRL: usize = 0;
     pub(crate) const INDEX_SRC: usize = 1;

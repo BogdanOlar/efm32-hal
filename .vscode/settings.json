@@ -6,14 +6,13 @@
     "rust-analyzer.cargo.features": [
         "defmt",
         "qfn48",
-        "use_debug_pins",
-        // "dma-debug-max-transfer",
+        // "use_debug_pins_as_gpio",
         "efemb",
         "efemb-timdrv-letim0-hz-32_768",
         // "efemb-timdrv-letim0-hz-1_000",
         // "efemb-timdrv-rtcc-hz-32_768",
         "crc-lib-compat",
-        // "debug-spi-dma-defmt-info"
+        // "debug-spi-dma-info"
     ],
     "[rust]": {
         "editor.defaultFormatter": "rust-lang.rust-analyzer",

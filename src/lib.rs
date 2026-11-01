@@ -11,6 +11,9 @@
 
 pub use efm32_pac as pac;
 
+// Must come before the other modules, so that its macros are visible in them
+mod fmt;
+
 pub mod acmp;
 pub mod cmu;
 pub mod crc;
@@ -107,7 +110,7 @@ const _: () = {
     const TIMDRV_COUNT: usize =
         cfg!(feature = "_timdrv-letim0") as usize + cfg!(feature = "_timdrv-rtcc") as usize;
 
-    assert!(
+    ::core::assert!(
         TIMDRV_COUNT == 1,
         "Embassy feature needs exactly one timer driver specified with one of the `efemb-timdrv-*` features"
     );

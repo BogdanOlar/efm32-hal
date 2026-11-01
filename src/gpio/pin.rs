@@ -788,8 +788,7 @@ impl PinId {
             13 => Self::Pin13,
             14 => Self::Pin14,
             15 => Self::Pin15,
-            // _ => unreachable!(),
-            _ => unreachable!(),
+            _ => ::core::unreachable!(),
         }
     }
 }

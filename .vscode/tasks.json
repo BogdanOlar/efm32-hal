@@ -68,7 +68,7 @@
                 "build",
                 "--example",
                 "em_exti",
-                "--features='defmt qfn48'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -167,7 +167,7 @@
                 "build",
                 "--example",
                 "gpio_exti",
-                "--features='defmt qfn48'"
+                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -220,27 +220,6 @@
             }
         },
         {
-            "label": "cargo build example spi LCD",
-            "type": "shell",
-            "command": "cargo",
-            "args": [
-                "build",
-                "--example",
-                "spi_lcd",
-                "--features='defmt qfn48'"
-            ],
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "presentation": {
-                "clear": true
-            },
-            "group": {
-                "kind": "build",
-                // "isDefault": true
-            }
-        },
-        {
             "label": "cargo build example timer",
             "type": "shell",
             "command": "cargo",
@@ -248,27 +227,6 @@
                 "build",
                 "--example",
                 "timer",
-                "--features='defmt'"
-            ],
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "presentation": {
-                "clear": true
-            },
-            "group": {
-                "kind": "build",
-                // "isDefault": true
-            }
-        },
-        {
-            "label": "cargo build example timer_le",
-            "type": "shell",
-            "command": "cargo",
-            "args": [
-                "build",
-                "--example",
-                "timer_le",
                 "--features='defmt'"
             ],
             "problemMatcher": [

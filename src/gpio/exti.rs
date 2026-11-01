@@ -378,7 +378,7 @@ impl ExtiId {
             13 => Self::Exti13,
             14 => Self::Exti14,
             15 => Self::Exti15,
-            _ => unreachable!(),
+            _ => ::core::unreachable!(),
         }
     }
 }

@@ -13,8 +13,6 @@ use crate::{
         spi::{Config, SpiError, SpiLowLevel, SpiParts, TX_FILLER_BYTE},
     },
 };
-#[cfg(feature = "debug-spi-dma-defmt-info")]
-use defmt::info;
 use embassy_hal_internal::Peri;
 // (Peri imported via crate)
 use embedded_hal::spi::ErrorType;
@@ -291,8 +289,8 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
         let total_units = tx_units.max(rx_units);
         assert_ne!(total_units, 0);
 
-        #[cfg(feature = "debug-spi-dma-defmt-info")]
-        info!("UNIT {}", unit);
+        #[cfg(feature = "debug-spi-dma-info")]
+        info!("UNIT {:?}", unit);
 
         let usart_p = self.low_level.peri.regs();
         let mut tx_list = DescList::new(&mut self.tx_descriptors);
@@ -313,7 +311,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
         let per_rx_addr = usart_p.rxdata().as_ptr().addr();
 
         let tx_desc = if tx_units > 0 {
-            #[cfg(feature = "debug-spi-dma-defmt-info")]
+            #[cfg(feature = "debug-spi-dma-info")]
             info!("TX: tx_units {}", tx_units);
 
             let desc = dma::list::reduced(
@@ -327,7 +325,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
             )?;
 
             if tx_filler_units > 0 {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
+                #[cfg(feature = "debug-spi-dma-info")]
                 info!("TX tx_filler_units {}", tx_filler_units);
 
                 dma::list::extended(
@@ -343,7 +341,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
 
             tx_list.into_transfer_descriptor(desc, FinMode::DoneIFS)
         } else {
-            #[cfg(feature = "debug-spi-dma-defmt-info")]
+            #[cfg(feature = "debug-spi-dma-info")]
             info!("TX tx_filler_units {}", tx_filler_units);
 
             let desc = dma::list::reduced(
@@ -360,7 +358,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
         };
 
         let rx_desc = if rx_units > 0 {
-            #[cfg(feature = "debug-spi-dma-defmt-info")]
+            #[cfg(feature = "debug-spi-dma-info")]
             info!("RX: rx_units {}", rx_units);
 
             let desc = dma::list::reduced(
@@ -374,7 +372,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
             )?;
 
             if rx_filler_units > 0 {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
+                #[cfg(feature = "debug-spi-dma-info")]
                 info!("RX rx_filler_units {}", tx_filler_units);
 
                 dma::list::extended(
@@ -390,7 +388,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
 
             rx_list.into_transfer_descriptor(desc, FinMode::DoneIFS)
         } else {
-            #[cfg(feature = "debug-spi-dma-defmt-info")]
+            #[cfg(feature = "debug-spi-dma-info")]
             info!("RX tx_filler_units {}", tx_filler_units);
 
             let desc = dma::list::reduced(

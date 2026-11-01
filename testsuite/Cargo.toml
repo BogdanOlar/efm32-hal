@@ -38,7 +38,7 @@ efemb = [
 ]
 efemb-timdrv-letim0-hz-32_768 = ["efm32-hal/efemb-timdrv-letim0-hz-32_768"]
 qfn48 = ["efm32-hal/qfn48"]
-use_debug_pins = ["efm32-hal/use_debug_pins"]
+use_debug_pins_as_gpio = ["efm32-hal/use_debug_pins_as_gpio"]
 
 # Integration tests run on-device via `probe-rs` (see `.cargo/config.toml`).
 [[test]]

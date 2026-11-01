@@ -25,8 +25,6 @@ use crate::{
     pac::Interrupt,
     peripherals,
 };
-#[cfg(feature = "debug-spi-dma-defmt-info")]
-use defmt::info;
 use embassy_hal_internal::Peri;
 
 /// Number of DMA channels
@@ -280,8 +278,8 @@ impl DmaChannel {
         // Set the non-blocking IRQ handler
         critical_section::with(|cs| {
             set_handler(cs, self.id(), |id, transfer_result| {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
-                info!("IRQ {}: {}", id, transfer_result);
+                #[cfg(feature = "debug-spi-dma-info")]
+                info!("IRQ {:?}: {:?}", id, transfer_result);
 
                 // signal to the main thread that transfer is resolved
                 critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
@@ -304,8 +302,8 @@ impl DmaChannel {
         // Set the non-blocking IRQ handler
         critical_section::with(|cs| {
             set_handler(cs, self.id(), |id, transfer_result| {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
-                info!("IRQ {}: {}", id, transfer_result);
+                #[cfg(feature = "debug-spi-dma-info")]
+                info!("IRQ {:?}: {:?}", id, transfer_result);
 
                 // signal to the main thread that transfer is resolved
                 critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
@@ -394,8 +392,8 @@ impl DmaChannel {
                 // Set the IRQ handler for this channel transfer
                 critical_section::with(|cs| {
                     set_handler(cs, self.id(), |id, transfer_result| {
-                        #[cfg(feature = "debug-spi-dma-defmt-info")]
-                        info!("IRQ {}: {}", id, transfer_result);
+                        #[cfg(feature = "debug-spi-dma-info")]
+                        info!("IRQ {:?}: {:?}", id, transfer_result);
 
                         // signal to the main thread that transfer is resolved
                         critical_section::with(|csd| {
@@ -555,7 +553,7 @@ pub enum ChannelId {
 impl ChannelId {
     /// Bitmask for the maximum value of a `ChannelId`
     const MASK_VALUE: u8 = {
-        assert!(
+        ::core::assert!(
             CHANNEL_COUNT.count_ones() == 1,
             "CHANNEL_COUNT must be a power of `2` otherwise the subtraction below won't work"
         );

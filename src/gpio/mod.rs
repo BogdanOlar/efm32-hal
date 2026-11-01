@@ -14,7 +14,7 @@
 //! Additional pins may be enabled with the `qfn32` or `qfn48` feature flags, depending on your controller's form factor
 //!
 //! All pins are in the [`Disabled`] mode by default, with the exception of the `GPIO::debug_pins` which can only be
-//! modified if the `use_debug_pins` feature flag is enabled (see [`debug`] module for more info and examples).
+//! modified if the `use_debug_pins_as_gpio` feature flag is enabled (see [`debug`] module for more info and examples).
 //!
 //! ```rust,no_run
 //! // Zero-sized typestate pins
@@ -97,7 +97,7 @@
 //! ```
 //!
 
-#[cfg(feature = "use_debug_pins")]
+#[cfg(feature = "use_debug_pins_as_gpio")]
 pub use crate::gpio::debug::DebugPinsEnabled;
 use crate::gpio::{
     dynamic::PinMode,
@@ -199,7 +199,7 @@ pub struct Gpio<'d> {
     /// Port `D` pin `15`
     pub pd15: Pin<'D', 15, Disabled>,
     /// Port `F` debug pins: `0`, `1`, `2`, `3`
-    #[cfg(feature = "use_debug_pins")]
+    #[cfg(feature = "use_debug_pins_as_gpio")]
     pub debug_pins: DebugPinsEnabled,
     /// Port `F` pin `4`
     #[cfg(any(feature = "qfn32", feature = "qfn48"))]
@@ -305,7 +305,7 @@ impl<'d> Gpio<'d> {
             pf6: Pin::new(),
             #[cfg(feature = "qfn48")]
             pf7: Pin::new(),
-            #[cfg(feature = "use_debug_pins")]
+            #[cfg(feature = "use_debug_pins_as_gpio")]
             debug_pins: DebugPinsEnabled::new(),
 
             exti0ctrl: ExtiCtrl::new(),

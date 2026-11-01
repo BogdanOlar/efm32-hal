@@ -7,8 +7,6 @@ use crate::dma::{
     irq,
     transfer::{ChannelTransfer, MemoryTransferParams, TransferParams},
 };
-#[cfg(feature = "debug-spi-dma-defmt-info")]
-use defmt::info;
 use embassy_sync::waitqueue::AtomicWaker;
 
 /// Embassy task wakers for each DMA channel
@@ -67,8 +65,8 @@ impl DmaChannel {
         // Set the async IRQ handler
         critical_section::with(|cs| {
             irq::set_handler(cs, self.id(), |id, transfer_result| {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
-                info!("IRQ {}: {}", id, transfer_result);
+                #[cfg(feature = "debug-spi-dma-info")]
+                info!("IRQ {:?}: {:?}", id, transfer_result);
                 // signal to the main thread that transfer is resolved
                 critical_section::with(|cs_inner| {
                     irq::irq_ch_set(cs_inner, id, Some(transfer_result))

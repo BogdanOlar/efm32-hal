@@ -309,7 +309,7 @@ impl ChannelId {
             9 => Self::Ch9,
             10 => Self::Ch10,
             11 => Self::Ch11,
-            _ => unreachable!(),
+            _ => ::core::unreachable!(),
         }
     }
 }

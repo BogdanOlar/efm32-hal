@@ -1,6 +1,6 @@
 //! Debug pins
 //!
-//! This module allows the HAL to use the Debug pins as normal GPIO pins, provided that the `use_debug_pins` feature
+//! This module allows the HAL to use the Debug pins as normal GPIO pins, provided that the `use_debug_pins_as_gpio` feature
 //! flag is enabled.
 //!
 //! ```rust,no_run
