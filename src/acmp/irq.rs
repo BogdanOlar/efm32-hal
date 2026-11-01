@@ -35,7 +35,7 @@ fn base_irq_handler<const PN: u8>() {
     // clear interrupt flags
     regs.ifc().write_value(Ifs(flags.into()));
 
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     super::efemb::async_handler::<PN>(flags);
 
     critical_section::with(|cs| {

@@ -7,7 +7,6 @@
         "defmt",
         "qfn48",
         // "use_debug_pins_as_gpio",
-        "efemb",
         "efemb-timdrv-letim0-hz-32_768",
         // "efemb-timdrv-letim0-hz-1_000",
         // "efemb-timdrv-rtcc-hz-32_768",

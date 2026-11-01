@@ -6,7 +6,7 @@
 //! **NOTE**: the RTCC keeps running through a system reset (it's only reset by power loss, pin, or software reset), so
 //! [`RtTimer::set_config`] always stops and fully reconfigures it.
 
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 pub mod efemb;
 pub mod irq;
 
@@ -300,7 +300,7 @@ impl<'d> RtTimer<'d> {
     /// Async await for timer interrupt
     ///
     /// Only interrupts enabled with [`RtTimer::enable_interrupts`] (or [`InterruptConfig::flags`]) will be returned.
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     pub async fn interrupt(&self) -> Interrupts {
         efemb::interrupts().await
     }
@@ -310,7 +310,7 @@ impl<'d> RtTimer<'d> {
     /// The channel is configured as [`ChannelMode::Compare`] against `CNT`, and its interrupt is only enabled while
     /// waiting. Since the compare match only triggers when `CNT` _becomes_ equal to `value`, a `value` which has
     /// already been reached will only match after the counter wraps around.
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     pub async fn wait_for_count(&mut self, channel: ChannelId, value: u32) {
         let flag = match channel {
             ChannelId::Ch0 => Interrupt::Cc0,

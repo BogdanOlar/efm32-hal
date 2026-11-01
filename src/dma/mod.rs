@@ -14,7 +14,7 @@ pub mod list;
 pub(crate) mod mmio;
 pub mod transfer;
 
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 pub mod efemb;
 use crate::{
     dma::{

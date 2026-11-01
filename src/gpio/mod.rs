@@ -120,7 +120,7 @@ use embedded_hal::digital::{self, ErrorKind};
 
 pub mod debug;
 pub mod dynamic;
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 pub mod efemb;
 pub mod erased;
 pub mod exti;

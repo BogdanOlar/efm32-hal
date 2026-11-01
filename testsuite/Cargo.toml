@@ -16,7 +16,7 @@ embedded-test = { version = "0.7.2", features = ["defmt"] }
 # `embassy-executor` with `default-features = false`, so the `platform-cortex-m` and
 # `executor-thread` features must be enabled here for `Executor::run()` to be available.
 embassy-executor = { version = "0.10", default-features = false, features = ["platform-cortex-m", "executor-thread"] }
-# `embassy-time` is used by the `spi_async` test to back `defmt::timestamp!`. The HAL's `efemb`
+# `embassy-time` is used by the `spi_async` test to back `defmt::timestamp!`. The HAL's `efemb-timdrv-*`
 # feature configures the `embassy-time-driver` tick rate; enabling `defmt` here makes `Instant`
 # format with defmt.
 embassy-time = { version = "0.5.1", default-features = false, features = ["defmt"] }
@@ -32,7 +32,6 @@ defmt = ["efm32-hal/defmt"]
 # support (`embassy-010`), which the `spi_async` test needs to drive `async fn` tests on an
 # embassy executor.
 efemb = [
-    "efm32-hal/efemb",
     "embedded-test/embassy-010",
     "efemb-timdrv-letim0-hz-32_768",
 ]

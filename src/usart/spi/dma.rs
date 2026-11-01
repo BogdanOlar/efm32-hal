@@ -34,8 +34,8 @@ pub struct Spi<'d, T: UsartInstance> {
 impl<'d, T: UsartInstance> Spi<'d, T> {
     /// Spi Master implementation using Dma channels.
     ///
-    /// Implements both [`embedded_hal::spi::SpiBus`], as well as [`embedded_hal_async::spi::SpiBus`] (if `efemb` crate
-    /// feature is enabled).
+    /// Implements both [`embedded_hal::spi::SpiBus`], as well as [`embedded_hal_async::spi::SpiBus`] (if one of the
+    /// `efemb-timdrv-*` crate features is enabled).
     ///
     /// # DMA Channel Priority (Errata USART_E203)
     ///
@@ -143,7 +143,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
     /// Do an async SPI transaction.
     ///
     /// `write` is written to the slave on MOSI and words received on MISO are stored in `read`.
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     pub async fn transfer_async<Word: Copy + 'static>(
         &mut self,
         read: &mut [Word],
@@ -191,7 +191,7 @@ impl<'d, T: UsartInstance> Spi<'d, T> {
     ///
     /// The contents of `words` are written to the slave, and the received words are stored into the same `words`
     /// buffer, overwriting it.
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     pub async fn transfer_in_place_async<Word: Copy + 'static>(
         &mut self,
         words: &mut [Word],
@@ -447,7 +447,7 @@ impl<'d, T: UsartInstance> embedded_hal::spi::SpiBus for Spi<'d, T> {
     }
 }
 
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 impl<'d, T: UsartInstance> embedded_hal_async::spi::SpiBus for Spi<'d, T> {
     async fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         self.transfer_async(words, &[]).await

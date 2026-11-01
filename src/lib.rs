@@ -105,7 +105,7 @@ pub fn init() -> Peripherals {
 }
 
 // Compile-time error unless exactly one embassy time driver is selected
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 const _: () = {
     const TIMDRV_COUNT: usize =
         cfg!(feature = "_timdrv-letim0") as usize + cfg!(feature = "_timdrv-rtcc") as usize;

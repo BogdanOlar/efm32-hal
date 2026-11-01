@@ -29,7 +29,7 @@ mod handlers {
         // clear interrupt flags
         RTCC.ifc().write_value(Ifs(flags.into()));
 
-        #[cfg(feature = "efemb")]
+        #[cfg(feature = "_efemb")]
         crate::rtcc::efemb::async_handler(flags);
 
         critical_section::with(|cs| RTCC_HANDLER.borrow(cs).borrow()(flags, RTCC));

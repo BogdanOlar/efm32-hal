@@ -1,6 +1,6 @@
 //! Analog Comparator
 
-#[cfg(feature = "efemb")]
+#[cfg(feature = "_efemb")]
 pub mod efemb;
 pub mod irq;
 
@@ -254,7 +254,7 @@ impl<'d, T: AcmpInstance> Acmp<'d, T> {
     }
 
     /// Async await for any enabled interrupt(s)
-    #[cfg(feature = "efemb")]
+    #[cfg(feature = "_efemb")]
     pub async fn interrupts(&self) -> Interrupts {
         efemb::InterruptsFuture::new(unsafe { self.peri.clone_unchecked() }).await
     }

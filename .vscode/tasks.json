@@ -29,7 +29,7 @@
                 "build",
                 "--example",
                 "dma",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -47,7 +47,7 @@
                 "build",
                 "--example",
                 "dma_examples",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -86,7 +86,7 @@
                 "build",
                 "--example",
                 "embassy_button",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -107,7 +107,7 @@
                 "build",
                 "--example",
                 "embassy_dma",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -128,7 +128,7 @@
                 "build",
                 "--example",
                 "embassy_example",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"
@@ -167,7 +167,7 @@
                 "build",
                 "--example",
                 "gpio_exti",
-                "--features='defmt qfn48 efemb efemb-timdrv-letim0-hz-32_768'"
+                "--features='defmt qfn48 efemb-timdrv-letim0-hz-32_768'"
             ],
             "problemMatcher": [
                 "$rustc"

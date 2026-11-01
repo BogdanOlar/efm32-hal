@@ -34,7 +34,7 @@ mod handlers {
         // clear interrupt flags
         regs.ifc().write_value(Ifs(flags.into()));
 
-        #[cfg(feature = "efemb")]
+        #[cfg(feature = "_efemb")]
         crate::timer_le::efemb::async_handler::<PN>(flags);
 
         critical_section::with(|cs| {

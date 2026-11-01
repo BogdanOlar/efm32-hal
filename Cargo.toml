@@ -69,20 +69,19 @@ qfn32 = []
 ## Controller package QFN48 with DC-DC GPIO.
 qfn48 = []
 #! ### Embassy
-## Embassy support for `efm32`
-efemb = [
+#! Embassy support (async drivers and an `embassy-time` driver) is enabled by picking *ONE* of the `efemb-timdrv-*`
+#! features.
+
+# Embassy async support (private feature, enabled by each `efemb-timdrv-*` feature)
+_efemb = [
     "dep:embassy-futures",
     "dep:embassy-sync",
     "dep:embassy-time-queue-utils",
     "dep:embassy-time-driver",
     "dep:embedded-hal-async",
 ]
-
-#! ### Embassy time driver
-#! Pick *ONE* of the `efemb-timdrv-*` features when using embassy.
-
 # An embassy time driver is selected (private feature, enabled by each `efemb-timdrv-*` feature)
-_timdrv = ["efemb"]
+_timdrv = ["_efemb"]
 # Using one of the LeTimer peripherals as the embassy time driver
 _timdrv-letim = ["_timdrv"]
 # LeTimer0 as embassy timer base (private feature, use the ones below this one)
@@ -166,16 +165,16 @@ required-features = ["defmt", "qfn48", "efemb-timdrv-letim0-hz-32_768"]
 
 [[example]]
 name = "embassy_button"
-required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt", "qfn48"]
+required-features = ["efemb-timdrv-letim0-hz-32_768", "defmt", "qfn48"]
 
 [[example]]
 name = "embassy_dma"
-required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
+required-features = ["efemb-timdrv-letim0-hz-32_768", "defmt"]
 
 [[example]]
 name = "embassy_example"
-required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
-# required-features = ["efemb", "efemb-timdrv-letim0-hz-1_000"]
+required-features = ["efemb-timdrv-letim0-hz-32_768", "defmt"]
+# required-features = ["efemb-timdrv-letim0-hz-1_000"]
 
 [[example]]
 name = "gpio"
@@ -183,8 +182,8 @@ required-features = ["defmt", "qfn48"]
 
 [[example]]
 name = "gpio_exti"
-# enabling "efemb" and "efemb-timdrv-letim0-hz-32_768" features in order to enable defmt timestamps
-required-features = ["defmt", "qfn48", "efemb", "efemb-timdrv-letim0-hz-32_768"]
+# enabling the "efemb-timdrv-letim0-hz-32_768" feature in order to enable defmt timestamps
+required-features = ["defmt", "qfn48", "efemb-timdrv-letim0-hz-32_768"]
 
 [[example]]
 name = "spi"
