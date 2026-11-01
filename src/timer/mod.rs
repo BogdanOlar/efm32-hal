@@ -623,7 +623,8 @@ impl<'d, T: TimerInstance, const CN: u8> DelayNs for ChannelDelay<'d, T, CN> {
             while ticks_left > 0 {
                 p.ifc().write(|w| w.set_cc(CN as usize, true));
                 p.cc(CN as usize).ccv().write(|w| w.set_ccv(compare as u16));
-                p.ien().modify(|w| w.set_cc(CN as usize, true));
+                // The CC flag is polled below: keep its interrupt disabled, or the timer's handler
+                // clears the flag first
 
                 // calculate next loop's values _before_ waiting so that the jitter between loops is minimal
                 ticks_left -= reload;

@@ -38,7 +38,7 @@ fn TIMER1() {
 
 fn base_irq_handler<const PN: u8>() {
     let regs = timer_regs::<PN>();
-    let flags = Interrupts::new_unchecked(regs.if_().read().0);
+    let flags = Interrupts::new_unchecked(regs.if_().read().0 & regs.ien().read().0);
 
     // clear interrupt flags
     regs.ifc().write_value(Ifs(flags.into()));
