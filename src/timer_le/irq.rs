@@ -14,10 +14,9 @@ pub(super) static LETIMER_HANDLER: [Mutex<RefCell<LeTimerIrqHandler>>; LeTimerId
 
 mod handlers {
     use super::LETIMER_HANDLER;
-    use crate::{
-        pac::{interrupt, letimer::regs::Ifs},
-        timer_le::Interrupts,
-    };
+    #[allow(unused_imports)]
+    use crate::pac::interrupt;
+    use crate::{pac::letimer::regs::Ifs, timer_le::Interrupts};
 
     fn letimer_regs<const PN: u8>() -> crate::pac::letimer::LeTimer {
         match PN {
@@ -26,6 +25,7 @@ mod handlers {
         }
     }
 
+    #[allow(dead_code)]
     fn base_irq_handler<const PN: u8>() {
         let regs = letimer_regs::<PN>();
         // Only handle enabled interrupts, so that flags which are polled by the user are left untouched

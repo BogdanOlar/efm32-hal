@@ -62,7 +62,7 @@ pub(crate) mod time_driver {
     use crate::{
         pac::interrupt,
         timer_le::{
-            ChannelId, Config, Interrupt, InterruptConfig, Interrupts, LeTimerId, LeTimerRegs,
+            ChannelId, Config, Interrupt, InterruptConfig, Interrupts, LeTimer, LeTimerInstance,
             Repmode,
         },
     };
@@ -71,11 +71,14 @@ pub(crate) mod time_driver {
         sync::atomic::{AtomicBool, AtomicU32, Ordering, compiler_fence},
     };
     use critical_section::{CriticalSection, Mutex};
+    use embassy_hal_internal::Peri;
     use embassy_time_driver::Driver;
     use embassy_time_queue_utils::Queue;
 
-    /// Embassy time driver using LeTimer<PN> peripheral
-    pub(crate) struct Ticker<const PN: u8> {
+    /// Embassy time driver using the LeTimer `T` peripheral
+    pub(crate) struct Ticker<T: LeTimerInstance> {
+        /// LeTimer peripheral, see [`Self::timer()`]
+        peri: Peri<'static, T>,
         /// Number of elapsed half-periods (`0x8000` ticks each).
         period: AtomicU32,
         /// Timestamp of the next alarm, `u64::MAX` if no alarm is set
@@ -86,7 +89,7 @@ pub(crate) mod time_driver {
         queue: Mutex<RefCell<Queue>>,
     }
 
-    impl<const PN: u8> Ticker<PN> {
+    impl<T: LeTimerInstance> Ticker<T> {
         /// Tick count (low 16 bits) at which the Comp1 (half-period) interrupt triggers
         const HALF_PERIOD: u16 = 0x8000;
 
@@ -98,8 +101,9 @@ pub(crate) mod time_driver {
         const ARM_WINDOW: u64 = 0xC000;
 
         /// Uninitialized time driver, see [`Ticker::start()`]
-        const fn new() -> Self {
+        const fn new(peri: Peri<'static, T>) -> Self {
             Self {
+                peri,
                 period: AtomicU32::new(0),
                 alarm_at: Mutex::new(Cell::new(u64::MAX)),
                 is_init: AtomicBool::new(false),
@@ -109,10 +113,8 @@ pub(crate) mod time_driver {
 
         /// Configure and start the timer
         fn start(&self) {
-            let timer = Self::timer();
-
-            timer.enable_clock();
-            timer.configure(&Config {
+            let mut timer = self.timer();
+            timer.set_config(&Config {
                 // The half-period scheme needs the counter to wrap at `0xFFFF` and keep running
                 repeat_mode: Repmode::Free,
                 comp0_top: false,
@@ -131,11 +133,6 @@ pub(crate) mod time_driver {
                 ..Default::default()
             });
 
-            // Enable the timer interrupt
-            unsafe {
-                cortex_m::peripheral::NVIC::unmask(timer.interrupt());
-            }
-
             // start the timer
             timer.start();
 
@@ -145,7 +142,7 @@ pub(crate) mod time_driver {
 
         /// Handle LeTimer interrupt
         fn on_interrupt(&self) {
-            let timer = Self::timer();
+            let mut timer = self.timer();
 
             critical_section::with(|cs| {
                 // Both just advance the half-period count, so the order in which they're handled doesn't matter
@@ -180,7 +177,7 @@ pub(crate) mod time_driver {
 
         /// Advance the half-period count, and arm the alarm if it's due within [`Self::ARM_WINDOW`]
         fn next_period(&self, cs: CriticalSection) {
-            let timer = Self::timer();
+            let mut timer = self.timer();
             let period = self.period.fetch_add(1, Ordering::Relaxed) + 1;
             let now = (period as u64) << 15;
 
@@ -198,7 +195,7 @@ pub(crate) mod time_driver {
         ///
         /// Returns `false` if `at` is already in the past, in which case no alarm is set.
         fn set_alarm(&self, cs: CriticalSection, at: u64) -> bool {
-            let timer = Self::timer();
+            let mut timer = self.timer();
             let alarm = self.alarm_at.borrow(cs);
 
             let now = self.now();
@@ -252,16 +249,17 @@ pub(crate) mod time_driver {
             ((period as u64) << 15) + ((counter as u32 ^ ((period & 1) << 15)) as u64)
         }
 
-        /// Get the LeTimer registers
-        const fn timer() -> LeTimerRegs {
-            match PN {
-                0 => LeTimerRegs::new(LeTimerId::LeTimer0),
-                _ => unreachable!(),
-            }
+        /// Get a handle to the LeTimer driver
+        ///
+        /// The driver is a shared `static`, so it only gets `&self`, while most [`LeTimer`] methods need `&mut self`.
+        /// The returned handle shares the peripheral with `self.peri`, which is fine since the handles are
+        /// short-lived, and register accesses which need to be atomic are done in a critical section.
+        fn timer(&self) -> LeTimer<'_, T> {
+            LeTimer::new_uninit(unsafe { self.peri.clone_unchecked() })
         }
     }
 
-    impl<const PN: u8> Driver for Ticker<PN> {
+    impl<T: LeTimerInstance> Driver for Ticker<T> {
         fn now(&self) -> u64 {
             if !self.is_init.load(Ordering::Relaxed) {
                 // Ticker not initialized
@@ -276,7 +274,7 @@ pub(crate) mod time_driver {
             // LeTimer counts _down_, so ticks are counted from `CNT = 0`: the logical up-counter is `u16::MAX - CNT`,
             // offset by `1` because the underflow flag is set when `CNT` _reaches_ `0` (RM 19.3.3). This aligns the
             // underflow interrupt with the tick count wrapping `0xFFFF -> 0`
-            let counter = Self::timer().count().wrapping_neg();
+            let counter = self.timer().count().wrapping_neg();
 
             Self::calc_now(period, counter)
         }
@@ -295,15 +293,14 @@ pub(crate) mod time_driver {
     }
 
     #[cfg(feature = "_timdrv-letim0")]
-    impl Ticker<0> {
+    impl Ticker<crate::peripherals::LeTimer0> {
         /// Initialize the embassy time driver
         pub(crate) fn init() {
-            // Typed binding: if the static isn't a `Ticker<0>`, this doesn't compile
-            let driver: &'static Ticker<0> = &EFEMB_TIME_DRIVER;
-            driver.start();
+            EFEMB_TIME_DRIVER.start();
         }
     }
 
+    /// If embassy is using LeTimer0 as time driver, then it also takes over its interrupt
     #[cfg(feature = "_timdrv-letim0")]
     #[interrupt]
     fn LETIMER0() {
@@ -311,5 +308,9 @@ pub(crate) mod time_driver {
     }
 
     #[cfg(feature = "_timdrv-letim0")]
-    embassy_time_driver::time_driver_impl!(static EFEMB_TIME_DRIVER: Ticker<0> = Ticker::new());
+    embassy_time_driver::time_driver_impl!(
+        static EFEMB_TIME_DRIVER: Ticker<crate::peripherals::LeTimer0> = Ticker::new(
+            unsafe { crate::peripherals::LeTimer0::steal() }
+        )
+    );
 }

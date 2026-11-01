@@ -22,8 +22,14 @@ pub mod timer;
 pub mod timer_le;
 pub mod usart;
 
+// Generate the HAL peripheral types
+embassy_hal_internal::peripherals_definition!(
+    Acmp0, Adc, Idac, Gpio, I2c, Usart0, Usart1, Timer0, Timer1, Gpcrc, Cryotimer, Rtcc, LeTimer0,
+    LeUart0, Pcnt, Wdog0, Msc, Fpueh, Ldma, Emu, Cmu, Rmu, Prs, Crypto,
+);
+
 // Generate the HAL peripheral singletons. Corresponding drivers can use these to create driver instances.
-embassy_hal_internal::peripherals!(
+embassy_hal_internal::peripherals_struct!(
     Acmp0,
     Adc,
     Idac,
@@ -75,7 +81,7 @@ pub fn init() -> Peripherals {
     #[cfg(feature = "efemb-timdrv-letim0-hz-1_000")]
     let cmu = cmu.with_lfa_clk(crate::cmu::LfClockSource::UlfRco);
     #[cfg(feature = "_timdrv-letim0")]
-    timer_le::efemb::time_driver::Ticker::<0>::init();
+    timer_le::efemb::time_driver::Ticker::<peripherals::LeTimer0>::init();
 
     // Compile-time error if no driver is selected
     #[cfg(all(feature = "efemb", not(feature = "_timdrv")))]
