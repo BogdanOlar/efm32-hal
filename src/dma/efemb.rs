@@ -5,7 +5,7 @@ use crate::dma::{
     CHANNEL_COUNT, DmaChannel, DmaResult,
     descriptor::TransferDescriptor,
     irq,
-    transfer::{ChannelTransfer, TransferParams},
+    transfer::{ChannelTransfer, MemoryTransferParams, TransferParams},
 };
 #[cfg(feature = "debug-spi-dma-defmt-info")]
 use defmt::info;
@@ -15,6 +15,44 @@ use embassy_sync::waitqueue::AtomicWaker;
 static DMA_WAKERS: [AtomicWaker; CHANNEL_COUNT] = [const { AtomicWaker::new() }; _];
 
 impl DmaChannel {
+    /// Async memory-to-memory DMA transfer.
+    ///
+    /// Async version of [`DmaChannel::memory_transfer()`]: the task is woken up by the DMA interrupt when the transfer
+    /// is done. If a linked descriptor list is needed, then the `dst` is used as storage. This allows transfers of any
+    /// length.
+    ///
+    /// The DMA transfer only starts when the returned future is first polled. If the future is dropped before
+    /// completing, then the transfer is canceled leaving the contents of `dst` in an undefined state (it may contain
+    /// parts of the linked descriptor list).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DmaError::BufferSizeMismatch`](crate::dma::DmaError::BufferSizeMismatch) if `src` and `dst` have
+    /// different lengths, OR the error of the transfer itself.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    ///     ch.memory_transfer_async(src, dst).await?;
+    ///     // `ch`, `src` and `dst` can now be used again
+    /// ```
+    pub async fn memory_transfer_async<'tl, Word: Copy + 'static>(
+        &'tl mut self,
+        src: &'tl [Word],
+        dst: &'tl mut [Word],
+    ) -> DmaResult {
+        self.cancel();
+
+        match Self::m2m_descriptors(src, dst)? {
+            Some(first_descriptor) => {
+                self.transfer_async(&first_descriptor, true, MemoryTransferParams { src, dst })
+                    .await
+            }
+            // 0 sized transfer: nothing to do
+            None => Ok(()),
+        }
+    }
+
     /// Perform an async DMA transfer with the given Descriptor.
     ///
     /// If `with_sw_trigger` is set then the DMA transfer will immediatelly be software-triggered.

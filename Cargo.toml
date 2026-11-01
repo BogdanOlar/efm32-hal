@@ -168,11 +168,11 @@ required-features = ["defmt", "qfn48"]
 
 [[example]]
 name = "embassy_button"
-required-features = ["efemb", "defmt"]
+required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
 
 [[example]]
 name = "embassy_dma"
-required-features = ["efemb", "defmt"]
+required-features = ["efemb", "efemb-timdrv-letim0-hz-32_768", "defmt"]
 
 [[example]]
 name = "embassy_example"

@@ -352,7 +352,7 @@ impl DmaChannel {
     ///
     /// # Errors
     ///
-    /// Returns [`DmaError::BufferMismatch`] if `src` and `dst` have different lengths.
+    /// Returns [`DmaError::BufferSizeMismatch`] if `src` and `dst` have different lengths.
     ///
     /// # Examples
     ///
@@ -387,33 +387,56 @@ impl DmaChannel {
         src: &'tl [Word],
         dst: &'tl mut [Word],
     ) -> Result<ChannelTransfer<'tl, MemoryTransferParams<'tl, Word>>, DmaError> {
-        if src.len() != dst.len() {
-            return Err(DmaError::BufferMismatch);
-        }
-
         self.cancel();
 
-        let byte_count = core::mem::size_of_val(src);
+        match Self::m2m_descriptors(src, dst)? {
+            Some(first_descriptor) => {
+                // Set the IRQ handler for this channel transfer
+                critical_section::with(|cs| {
+                    set_handler(cs, self.id(), |id, transfer_result| {
+                        #[cfg(feature = "debug-spi-dma-defmt-info")]
+                        info!("IRQ {}: {}", id, transfer_result);
 
-        // Handle 0 sized transfers: set a dummy success token and skip hardware setup
-        if byte_count == 0 {
-            critical_section::with(|cs| irq::irq_ch_set(cs, self.id(), Some(Ok(()))));
-            return Ok(ChannelTransfer::new(
-                self,
-                MemoryTransferParams { src, dst },
-            ));
+                        // signal to the main thread that transfer is resolved
+                        critical_section::with(|csd| {
+                            irq::irq_ch_set(csd, id, Some(transfer_result))
+                        });
+                    })
+                });
+
+                // Start the transfer. The descriptor was built safely by `m2m_descriptors`.
+                unsafe { self.start(&first_descriptor, true) };
+            }
+            // Handle 0 sized transfers: set a dummy success token and skip hardware setup
+            None => critical_section::with(|cs| irq::irq_ch_set(cs, self.id(), Some(Ok(())))),
         }
 
-        // Set the IRQ handler for this channel transfer
-        critical_section::with(|cs| {
-            set_handler(cs, self.id(), |id, transfer_result| {
-                #[cfg(feature = "debug-spi-dma-defmt-info")]
-                info!("IRQ {}: {}", id, transfer_result);
+        Ok(ChannelTransfer::new(
+            self,
+            MemoryTransferParams { src, dst },
+        ))
+    }
 
-                // signal to the main thread that transfer is resolved
-                critical_section::with(|csd| irq::irq_ch_set(csd, id, Some(transfer_result)));
-            })
-        });
+    /// Build the descriptors of a memory-to-memory transfer.
+    ///
+    /// Returns the first descriptor (to be written to the channel registers), which links to the rest of the
+    /// descriptor list (if any), built at the end of `dst`. Returns `None` for a 0 sized transfer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DmaError::BufferSizeMismatch`] if `src` and `dst` have different lengths.
+    fn m2m_descriptors<Word: Copy + 'static>(
+        src: &[Word],
+        dst: &mut [Word],
+    ) -> Result<Option<TransferDescriptor>, DmaError> {
+        if src.len() != dst.len() {
+            return Err(DmaError::BufferSizeMismatch);
+        }
+
+        let byte_count = core::mem::size_of_val(src);
+        if byte_count == 0 {
+            return Ok(None);
+        }
 
         // Decide which unit/type the transfer may use
         let unit = if src.as_ptr().addr().is_multiple_of(size_of::<u32>())
@@ -463,22 +486,14 @@ impl DmaChannel {
             )
         };
 
-        let first_descriptor = build_m2m_descriptors(
+        Ok(Some(build_m2m_descriptors(
             src.as_ptr().addr(),
             dst.as_ptr().addr(),
             total_units,
             last_chunk_min_units,
             descriptor_list,
             unit,
-        );
-
-        // Start the transfer. The descriptor was built safely by `build_descriptors`.
-        unsafe { self.start(&first_descriptor, true) };
-
-        Ok(ChannelTransfer::new(
-            self,
-            MemoryTransferParams { src, dst },
-        ))
+        )))
     }
 
     /// Cancel any on-going transfer
@@ -726,7 +741,7 @@ pub enum DmaError {
     /// Descriptor list overflowed
     DescriptorListOverflow,
     /// Source and destination buffers have different lengths
-    BufferMismatch,
+    BufferSizeMismatch,
 }
 
 /// Build the first transfer descriptor, and any necessary linked descriptors for a memory-to-memory transfer
