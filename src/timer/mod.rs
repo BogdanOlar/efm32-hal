@@ -213,12 +213,12 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
 
     /// Enable multiple interrupts
     pub fn enable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_set(flags.0);
+        self.peri.regs().ien().sc_set(flags.into());
     }
 
     /// Disable multiple interrupts
     pub fn disable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_clear(flags.0);
+        self.peri.regs().ien().sc_clear(flags.into());
     }
 
     /// Get all interrupt flags
@@ -228,12 +228,12 @@ impl<'d, T: TimerInstance> Timer<'d, T> {
 
     /// Set multiple interrupt flags
     pub fn set_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifs().write_value(Ifs(flags.0));
+        self.peri.regs().ifs().write_value(Ifs(flags.into()));
     }
 
     /// Clear multiple interrupt flags
     pub fn clear_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifc().write_value(Ifs(flags.0));
+        self.peri.regs().ifc().write_value(Ifs(flags.into()));
     }
 
     /// Async await for timer interrupt

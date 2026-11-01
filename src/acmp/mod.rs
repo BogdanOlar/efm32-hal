@@ -7,7 +7,10 @@ pub mod irq;
 use crate::{
     Sealed, SingleCycleRMW,
     acmp::irq::default_handler,
-    pac::acmp::vals::{Csressel, HysteresisHyst, Vasel},
+    pac::acmp::{
+        regs::Ifs,
+        vals::{Csressel, HysteresisHyst, Vasel},
+    },
     peripherals,
 };
 use cortex_m::peripheral::NVIC;
@@ -227,12 +230,12 @@ impl<'d, T: AcmpInstance> Acmp<'d, T> {
 
     /// Enable multiple interrupts
     pub fn enable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_set(flags.0);
+        self.peri.regs().ien().sc_set(flags.into());
     }
 
     /// Disable multiple interrupts
     pub fn disable_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ien().sc_clear(flags.0);
+        self.peri.regs().ien().sc_clear(flags.into());
     }
 
     /// Get all interrupt flags
@@ -242,12 +245,12 @@ impl<'d, T: AcmpInstance> Acmp<'d, T> {
 
     /// Set multiple interrupt flags
     pub fn set_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifs().sc_set(flags.0);
+        self.peri.regs().ifs().write_value(Ifs(flags.into()));
     }
 
     /// Clear multiple interrupt flags
     pub fn clear_interrupts(&mut self, flags: Interrupts) {
-        self.peri.regs().ifc().sc_set(flags.0);
+        self.peri.regs().ifc().write_value(Ifs(flags.into()));
     }
 
     /// Async await for any enabled interrupt(s)

@@ -3,7 +3,7 @@
 use crate::SingleCycleRMW;
 use crate::dma::descriptor::Descriptor;
 use crate::dma::{CHANNEL_COUNT, ChReqSel, ChannelId, DmaError};
-use crate::pac::ldma::Ldma;
+use crate::pac::ldma::{Ldma, regs::Ifs};
 
 /// Disable "Synchronization PRS Set Enable"
 pub(crate) fn ctrl_syncprsseten_clear(id: ChannelId) {
@@ -80,9 +80,10 @@ pub(crate) fn ien_clear(id: ChannelId) {
     dma().ien().sc_clear(1 << id as u8);
 }
 
-/// Clear interrupt flag for channel (single-cycle read-modify-write)
+/// Clear interrupt flag for channel
 pub(crate) fn ifc_set(id: ChannelId) {
-    dma().ifc().sc_set(1 << id as u8);
+    // IFC is write-1-to-clear, so a plain write only clears this channel's flag
+    dma().ifc().write_value(Ifs(1 << id as u8));
 }
 
 pub(crate) fn ch_error() -> Option<ChannelId> {
