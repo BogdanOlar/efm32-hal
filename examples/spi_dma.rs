@@ -1,4 +1,4 @@
-//! Build with `cargo build --example spi --features="defmt qfn48"`
+//! Build with `cargo build --example spi_dma --features="defmt qfn48"`
 
 #![no_main]
 #![no_std]
@@ -8,7 +8,6 @@ use efm32_hal::{
     Peripherals,
     crc::{CrcDriver, algos::CRC_32_CKSUM},
     dma::{Dma, descriptor::Descriptor},
-    init, pac,
     prelude::*,
 };
 
@@ -24,14 +23,16 @@ use defmt_rtt as _;
 #[entry]
 fn main() -> ! {
     // transfer_u8_dma_long_symmetric(efm32_init());
-    transfer_u8_dma_short_asymmetric_rx_longer(init());
+    transfer_u8_dma_short_asymmetric_rx_longer(efm32_hal::init());
     loop {}
 }
 
 fn transfer_u8_dma_short_asymmetric_rx_longer(p: Peripherals) {
     let crc = CrcDriver::new(p.Gpcrc).into_algo_32(&CRC_32_CKSUM);
     let gpio = Gpio::new(p.Gpio);
-    let mut spi = Spi::new_blocking(
+    let dma = Dma::init(p.Ldma);
+    // RX uses the lower channel number (higher priority), see `Spi::new` (Errata USART_E203)
+    let mut spi = Spi::new(
         SpiParts::new(
             p.Usart0,
             gpio.pc8.into_mode::<OutPp>(),
@@ -39,10 +40,9 @@ fn transfer_u8_dma_short_asymmetric_rx_longer(p: Peripherals) {
             gpio.pc7.into_mode::<InFilt>(),
         ),
         &Config::new(MODE_2, 1).with_loopback(true),
+        dma.ch1,
+        dma.ch0,
     );
-
-    let dma = Dma::init(p.Ldma);
-    let mut spi = spi.into_spi_dma(dma.ch0, dma.ch1);
 
     // Set the `dst` length to a multiple of 1
     let mut dst_buf: [u8; SRC_U8_SIZE] = [0; _];
@@ -77,14 +77,19 @@ fn transfer_u8_dma_short_asymmetric_rx_longer(p: Peripherals) {
     // check potential under/overflows
     assert_eq!(dst_buf[0], 0);
     assert_eq!(dst_buf[33], 0);
+
+    info!("transfer_u8_dma_short_asymmetric_rx_longer: Ok");
 }
 
 /// SPI transfer uses more than one descriptor for both TX and RX
 /// TX and RX slices have the same size
+#[allow(dead_code)] // alternative test, see `main`
 fn transfer_u8_dma_long_symmetric(p: Peripherals) {
     let crc = CrcDriver::new(p.Gpcrc).into_algo_32(&CRC_32_CKSUM);
     let gpio = Gpio::new(p.Gpio);
-    let mut spi = Spi::new_blocking(
+    let dma = Dma::init(p.Ldma);
+    // RX uses the lower channel number (higher priority), see `Spi::new` (Errata USART_E203)
+    let mut spi = Spi::new(
         SpiParts::new(
             p.Usart0,
             gpio.pc8.into_mode::<OutPp>(),
@@ -92,10 +97,9 @@ fn transfer_u8_dma_long_symmetric(p: Peripherals) {
             gpio.pc7.into_mode::<InFilt>(),
         ),
         &Config::new(MODE_2, 1).with_loopback(true),
+        dma.ch2,
+        dma.ch1,
     );
-
-    let dma = Dma::init(p.Ldma);
-    let mut spi = spi.into_spi_dma(dma.ch1, dma.ch2);
 
     // Set the `dst` length to a multiple of 1
     let mut dst_buf: [u8; SRC_U8_SIZE] = [0; _];

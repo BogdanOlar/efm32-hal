@@ -7,8 +7,7 @@ use cortex_m_rt::entry;
 use efm32_hal::{
     cmu::Cmu,
     gpio::{Gpio, OutPp},
-    init,
-    timer::{Timer, TimerDivider},
+    timer::{Channels, Config, Presc, Timer},
 };
 
 use embedded_hal::{delay::DelayNs, digital::StatefulOutputPin, pwm::SetDutyCycle};
@@ -25,13 +24,24 @@ fn main() -> ! {
     let _core_p = cortex_m::Peripherals::take().unwrap();
     // `efm32_init` returns the peripheral singletons once; each `p.XXX` is moved into its driver,
     // so a second driver on the same instance would not compile.
-    let p = init();
+    let p = efm32_hal::init();
     let clocks = Cmu::new(p.Cmu).freeze();
     let gpio = Gpio::new(p.Gpio);
     let mut pin_delay = gpio.pd14.into_mode::<OutPp>();
     let pin_pwm = gpio.pd13.into_mode::<OutPp>();
-    let timer = Timer::new(p.Timer0, TimerDivider::Div1024);
-    let (tim0ch0, tim0ch1, _tim0ch2, _tim0ch3) = timer.into_channels();
+    let mut timer = Timer::new(
+        p.Timer0,
+        &Config {
+            presc: Presc::Div1024,
+            ..Default::default()
+        },
+    );
+    timer.start();
+    let Channels {
+        ch0: tim0ch0,
+        ch1: tim0ch1,
+        ..
+    } = timer.channels;
 
     let mut pwm = tim0ch1.into_pwm(pin_pwm);
     let mut delayer = tim0ch0.into_delay(&clocks);

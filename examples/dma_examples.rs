@@ -10,29 +10,19 @@ use cortex_m::asm;
 use cortex_m_rt::entry;
 use defmt::{error, info};
 use defmt_rtt as _;
-use efm32_hal::{
-    dma::{
-        Dma, DmaChannel, DmaError,
-        descriptor::{
-            Addr, AddrInc, BlockSize, Descriptor, SyncDescriptor, TransferCount,
-            TransferDescriptor, UnitSize,
-        },
-        list::{DescList, FinMode},
-    },
-    init,
-    prelude::*,
-    timer_le::efemb::Ticker,
+use efm32_hal::dma::{
+    Dma, DmaChannel, DmaError,
+    descriptor::{Addr, Descriptor, SyncDescriptor, TransferDescriptor, UnitSize},
+    list::{DescList, FinMode},
 };
 use panic_probe as _;
-// @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
-use embassy_time::Timer as _;
+// required for defmt timestamps to work
+use embassy_time as _;
 
 #[entry]
 fn main() -> ! {
-    let p = init();
-    // Initialize the embassy time driver (for defmt timestamps)
-    let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-    Ticker::init();
+    // Also starts the embassy time driver (for defmt timestamps)
+    let p = efm32_hal::init();
 
     let dma = Dma::init(p.Ldma);
 
@@ -40,7 +30,7 @@ fn main() -> ! {
     if let Err(e) = &ret {
         error!("{}", e);
     }
-    let (ch0, ch1) = ret.unwrap();
+    let (_ch0, _ch1) = ret.unwrap();
 
     loop {
         asm::wfe();

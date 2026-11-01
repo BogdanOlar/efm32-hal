@@ -2,7 +2,7 @@
 #![no_std]
 
 use core::cell::RefCell;
-use cortex_m::asm::nop;
+use cortex_m::{asm::nop, peripheral::NVIC};
 use cortex_m_rt::entry;
 use critical_section::Mutex;
 use defmt::info;
@@ -12,13 +12,11 @@ use efm32_hal::{
         dynamic::DynamicPin,
         exti::{self, ExtiEdge, ExtiId},
     },
-    init,
-    pac::{Interrupt, NVIC},
+    pac::Interrupt,
     prelude::*,
-    timer_le::efemb::Ticker,
 };
-// @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
-use embassy_time::Timer as _;
+// required for defmt timestamps to work
+use embassy_time as _;
 use panic_probe as _;
 
 static LED0: Mutex<RefCell<Option<DynamicPin>>> = Mutex::new(RefCell::new(None));
@@ -27,11 +25,8 @@ static LED1: Mutex<RefCell<Option<DynamicPin>>> = Mutex::new(RefCell::new(None))
 #[entry]
 fn main() -> ! {
     let _core_p = cortex_m::Peripherals::take().unwrap();
-    let p = init();
-
-    // Initialize the embassy time driver (for defmt timestamps)
-    let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-    Ticker::init();
+    // Also starts the embassy time driver (for defmt timestamps)
+    let p = efm32_hal::init();
 
     // ---- NVIC ----
     unsafe {

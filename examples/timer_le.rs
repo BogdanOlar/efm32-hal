@@ -7,7 +7,6 @@ use cortex_m_rt::entry;
 use efm32_hal::{
     cmu::{Cmu, LfClockSource},
     gpio::{Gpio, OutPp},
-    init,
     timer::{Timer, TimerDivider},
     timer_le::LeTimerExt,
 };
@@ -24,7 +23,7 @@ use defmt_rtt as _;
 #[entry]
 fn main() -> ! {
     let _core_p = cortex_m::Peripherals::take().unwrap();
-    let p = init();
+    let p = efm32_hal::init();
     let clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
     let gpio = Gpio::new(p.Gpio);
 
