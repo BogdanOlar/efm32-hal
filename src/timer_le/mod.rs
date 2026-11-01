@@ -112,6 +112,8 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
         }
 
         self.stop();
+        // make sure the timer is stopped
+        self.wait_for_sync();
         self.disable_interrupts(Interrupts::ALL);
         self.clear_interrupts(Interrupts::ALL);
 
@@ -295,12 +297,17 @@ impl<'d, T: LeTimerInstance> LeTimer<'d, T> {
         });
     }
 
-    /// Write `CMD` register, and wait for it to synchronize
+    /// Write `CMD` register,
+    /// Waits for any ongoing commands to synchronize before executing the new one
     fn command(&mut self, f: impl FnOnce(&mut crate::pac::letimer::regs::Cmd)) {
-        let p = self.peri.regs();
-        p.cmd().write(f);
-        // wait for sync
-        while p.syncbusy().read().cmd() {
+        // A CMD write while a previous command is still pending isn't supported (RM 4.3.1)
+        self.wait_for_sync();
+        self.peri.regs().cmd().write(f);
+    }
+
+    /// Wait for `command` to be synchronized
+    fn wait_for_sync(&self) {
+        while self.peri.regs().syncbusy().read().cmd() {
             nop()
         }
     }

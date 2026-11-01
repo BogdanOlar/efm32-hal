@@ -2,8 +2,6 @@
 
 use crate::timer::{Interrupts, TimerId, TimerInstance};
 use core::sync::atomic::AtomicU32;
-#[cfg(feature = "defmt")]
-use defmt::warn;
 use embassy_hal_internal::Peri;
 
 static TIMER_WAKERS: [embassy_sync::waitqueue::AtomicWaker; TimerId::COUNT] =
@@ -11,12 +9,8 @@ static TIMER_WAKERS: [embassy_sync::waitqueue::AtomicWaker; TimerId::COUNT] =
 static TIMER_RAW_FLAGS: [AtomicU32; TimerId::COUNT] = [const { AtomicU32::new(0) }; _];
 
 pub(super) fn async_handler<const PN: u8>(flags: Interrupts) {
-    let old = TIMER_RAW_FLAGS[PN as usize].swap(flags.into(), core::sync::atomic::Ordering::SeqCst);
-
-    #[cfg(feature = "defmt")]
-    if old != 0 {
-        warn!("IRQ unhandled raw flags {}", old);
-    }
+    // Accumulate flags until the future consumes them, so none are lost if several IRQs fire before it is polled
+    TIMER_RAW_FLAGS[PN as usize].fetch_or(flags.into(), core::sync::atomic::Ordering::SeqCst);
 
     TIMER_WAKERS[PN as usize].wake();
 }
