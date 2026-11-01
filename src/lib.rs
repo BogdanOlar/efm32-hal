@@ -95,17 +95,23 @@ pub fn init() -> Peripherals {
     #[cfg(feature = "_timdrv-rtcc")]
     rtcc::efemb::time_driver::Ticker::init();
 
-    // Compile-time error if no driver is selected
-    #[cfg(all(feature = "efemb", not(feature = "_timdrv")))]
-    compile_error!(
-        "Embassy feature needs a timer driver specified with one of the `efemb-timdrv-*` features"
-    );
-
     // Pacify clippy
     let _ = cmu.freeze();
 
     peripherals
 }
+
+// Compile-time error unless exactly one embassy time driver is selected
+#[cfg(feature = "efemb")]
+const _: () = {
+    const TIMDRV_COUNT: usize =
+        cfg!(feature = "_timdrv-letim0") as usize + cfg!(feature = "_timdrv-rtcc") as usize;
+
+    assert!(
+        TIMDRV_COUNT == 1,
+        "Embassy feature needs exactly one timer driver specified with one of the `efemb-timdrv-*` features"
+    );
+};
 
 /// Convenience module which exports the most used types for each module
 pub mod prelude {
