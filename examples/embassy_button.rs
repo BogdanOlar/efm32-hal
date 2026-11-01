@@ -5,20 +5,19 @@ use cortex_m::peripheral::NVIC;
 use defmt_rtt as _;
 use efm32_hal::{
     gpio::{dynamic::DynamicPin, efemb::AsyncInputPin},
-    init,
     pac::Interrupt,
     prelude::*,
 };
 use embassy_executor::Spawner;
-// @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
-use embassy_time::Timer as _;
+// required for defmt timestamps to work
+use embassy_time as _;
 use embedded_hal_async::digital::Wait;
 use panic_halt as _;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Also initializes the embassy time driver, which provides the logging timestamps
-    let p = init();
+    let p = efm32_hal::init();
 
     // Initialize GPIO
     let gpio = Gpio::new(p.Gpio);

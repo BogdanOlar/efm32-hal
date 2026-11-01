@@ -9,31 +9,25 @@ use defmt::info;
 use defmt_rtt as _;
 use efm32_hal::{
     gpio::exti::{self, ExtiEdge, ExtiId},
-    init,
-    pac::{Interrupt, NVIC},
+    pac::Interrupt,
     prelude::*,
-    timer_le::efemb::Ticker,
 };
 use panic_probe as _;
-// @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
-use embassy_time::Timer as _;
+// required for defmt timestamps to work
+use embassy_time as _;
 
 static BTN0_CHANNEL: Mutex<RefCell<Option<bool>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
     let mut core_p = cortex_m::Peripherals::take().unwrap();
-    let p = init();
+    let p = efm32_hal::init();
 
     // ---- NVIC ----
     unsafe {
-        NVIC::unmask(Interrupt::GPIO_EVEN);
-        NVIC::unmask(Interrupt::GPIO_ODD);
+        cortex_m::peripheral::NVIC::unmask(Interrupt::GPIO_EVEN);
+        cortex_m::peripheral::NVIC::unmask(Interrupt::GPIO_ODD);
     }
-
-    // Initialize the embassy time driver (for defmt timestamps)
-    let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-    Ticker::init();
 
     let mut gpio = Gpio::new(p.Gpio);
 

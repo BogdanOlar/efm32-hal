@@ -5,15 +5,10 @@ use cortex_m::asm;
 use cortex_m_rt::entry;
 use defmt::{error, info};
 use defmt_rtt as _;
-use efm32_hal::{
-    dma::{Dma, DmaChannel},
-    init,
-    prelude::*,
-    timer_le::efemb::Ticker,
-};
+use efm32_hal::dma::{Dma, DmaChannel};
 use panic_probe as _;
-// @note: `use embassy_time` is required in some form in order for defmt timestamps provided by `embassy-time` to work
-use embassy_time::Timer as _;
+// required for defmt timestamps provided by `embassy-time` to work
+use embassy_time as _;
 
 const BUF_UNIT_SIZE: usize = 1024 * 10;
 
@@ -26,27 +21,19 @@ const TRANSFER_UNIT_COUNT: usize = 0x800 * 4 + 5;
 
 #[entry]
 fn main() -> ! {
-    let p = init();
+    let p = efm32_hal::init();
     let dma = Dma::init(p.Ldma);
-
-    // Initialize the embassy time driver (for defmt timestamps)
-    let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-    Ticker::init();
 
     let mut ch = dma.ch1;
     for i in 0..10 {
         transfer(&mut ch);
 
         // DEBUG: make sure we did not drop the transfer while the DMA channel was not done
-        {
-            // SAFETY: read-only check of the DMA channel busy flag; the LDMA singleton was
-            // already consumed above, but this block only reads channel state.
-            let dma = Dma::init(unsafe { efm32_hal::peripherals::Ldma::steal() });
-            assert!(!dma.ch1.busy());
-        }
+        assert!(!ch.busy());
 
         info!("Done. {}", i);
     }
+
     loop {
         asm::wfe();
     }
@@ -66,10 +53,10 @@ fn transfer(ch: &mut DmaChannel) {
         seq
     };
     let src = &SRC_U8[0..];
-    let mut dst_u8: [u8; BUF_UNIT_SIZE] = [0u8; _];
+    let mut dst_u8: [u8; BUF_UNIT_SIZE + 10] = [0u8; _];
 
     // take an unaligned slice of `dst` so that the transfer is done with bytes, not half-words or words
-    let dst = &mut dst_u8[1..TRANSFER_UNIT_COUNT + 1];
+    let dst = &mut dst_u8[1..BUF_UNIT_SIZE + 1];
 
     // // Half-Word aligned transfer
     // let dst = &mut dst_u8[2..TRANSFER_UNIT_COUNT + 2];
@@ -85,14 +72,13 @@ fn transfer(ch: &mut DmaChannel) {
     info!("dst: {} bytes @ 0x{:X}", dst.len(), dst.as_ptr().addr());
 
     let transfer_result = {
-        let mut transfer = match ch.memory_transfer(&SRC_U8, dst) {
+        let mut transfer = match ch.memory_transfer(src, dst) {
             Ok(t) => t,
             Err(e) => {
                 error!("Failed to start transfer: {}", e);
                 return;
             }
         };
-        info!("Using <{}> size unit transfer", transfer.unit());
 
         loop {
             match transfer.try_resolve() {
