@@ -64,6 +64,8 @@ pub use embassy_hal_internal::{Peri, PeripheralType};
 
 /// Initialize the HAL and return the (HAL) peripheral singletons.
 ///
+/// If embassy support feature is enabled, the embassy time driver will also be initialized.
+///
 /// This may be called only once; a second call panics.
 pub fn init() -> Peripherals {
     // Return the HAL peripherals

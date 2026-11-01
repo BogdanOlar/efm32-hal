@@ -5,7 +5,7 @@ use defmt::error;
 use efm32_hal::{crc::Crc, peripherals::Usart0, usart::spi, usart::spi::dma::Spi};
 
 // Provide a defmt timestamp backed by the embassy time driver. The `efemb` feature enables the
-// HAL's LeTimer0 time driver, which `#[init]` starts via `Ticker::init()` before any test runs, so
+// HAL's LeTimer0 time driver, which `efm32_hal::init()` (called from `#[init]`) starts before any test runs, so
 // `Instant::now()` returns real monotonic microseconds from then on (and `0` until then). This
 // satisfies the `{t}` placeholder in the probe-rs log format.
 defmt::timestamp!("{=u64:us}", { embassy_time::Instant::now().as_micros() });
@@ -17,12 +17,10 @@ mod tests {
     use defmt::error;
     use defmt_rtt as _;
     use efm32_hal::{
-        cmu::{Cmu, LfClockSource},
         crc::{algos::CRC_32_CKSUM, Crc, CrcDriver},
         dma::{descriptor::Descriptor, Dma},
         gpio::{Gpio, InFilt, OutPp},
         peripherals::Usart0,
-        timer_le::efemb::Ticker,
         usart::spi::{dma::Spi, Config, SpiParts},
     };
     use embedded_hal::spi::MODE_2;
@@ -83,13 +81,9 @@ mod tests {
 
     #[init]
     fn init() -> (Spi<'static, Usart0>, Crc<u32>) {
-        // Configure the clocks required by the embassy time driver. LfAClk must be enabled (here the
-        // LFRCO at 32.768 kHz, matching the `efemb-timdrv-letim0-hz-32_768` feature) and the HfClk must
-        // come from an HF source so that LeTimer0's `Ticker::init()` doesn't fault. See the warning in
-        // [`Ticker::init`].
+        // Also configures the LFA clock (LFRCO, matching the `efemb-timdrv-letim0-hz-32_768` feature) and starts the
+        // embassy time driver
         let p = efm32_hal::init();
-        let _clocks = Cmu::new(p.Cmu).with_lfa_clk(LfClockSource::LfRco).freeze();
-        Ticker::init();
 
         let crc = CrcDriver::new(p.Gpcrc).into_algo_32(&CRC_32_CKSUM);
         let gpio = Gpio::new(p.Gpio);
